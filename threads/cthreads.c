@@ -3,19 +3,22 @@
  *
  * @APPLE_LICENSE_HEADER_START@
  * 
- * The contents of this file constitute Original Code as defined in and
- * are subject to the Apple Public Source License Version 1.1 (the
- * "License").  You may not use this file except in compliance with the
- * License.  Please obtain a copy of the License at
- * http://www.apple.com/publicsource and read it before using this file.
+ * Copyright (c) 1999-2003 Apple Computer, Inc.  All Rights Reserved.
  * 
- * This Original Code and all software distributed under the License are
- * distributed on an "AS IS" basis, WITHOUT WARRANTY OF ANY KIND, EITHER
+ * This file contains Original Code and/or Modifications of Original Code
+ * as defined in and that are subject to the Apple Public Source License
+ * Version 2.0 (the 'License'). You may not use this file except in
+ * compliance with the License. Please obtain a copy of the License at
+ * http://www.opensource.apple.com/apsl/ and read it before using this
+ * file.
+ * 
+ * The Original Code and all software distributed under the License are
+ * distributed on an 'AS IS' basis, WITHOUT WARRANTY OF ANY KIND, EITHER
  * EXPRESS OR IMPLIED, AND APPLE HEREBY DISCLAIMS ALL SUCH WARRANTIES,
  * INCLUDING WITHOUT LIMITATION, ANY WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE OR NON-INFRINGEMENT.  Please see the
- * License for the specific language governing rights and limitations
- * under the License.
+ * FITNESS FOR A PARTICULAR PURPOSE, QUIET ENJOYMENT OR NON-INFRINGEMENT.
+ * Please see the License for the specific language governing rights and
+ * limitations under the License.
  * 
  * @APPLE_LICENSE_HEADER_END@
  */
@@ -61,7 +64,7 @@ extern void _longjmp(jmp_buf env, int val);
 
 #ifdef	CTHREADS_DEBUG
 int cthread_debug = FALSE;
-#endif	CTHREADS_DEBUG
+#endif	/* CTHREADS_DEBUG */
 
 /*
  * Routines for supporting fork() of multi-threaded programs.
@@ -70,9 +73,11 @@ int cthread_debug = FALSE;
 
 extern void _malloc_fork_prepare(), _malloc_fork_parent();
 extern void _malloc_fork_child();
+extern void fork_mach_init();
 extern void _cproc_fork_child(), _stack_fork_child();
 extern void _lu_fork_child(void);
-extern void _pthread_fork_child(void);
+extern void _pthread_fork_child(pthread_t);
+extern void _notify_fork_child(void);
 
 static pthread_t psaved_self = 0;
 static pthread_lock_t psaved_self_global_lock = LOCK_INITIALIZER;
@@ -108,8 +113,6 @@ void _cthread_fork_child()
  * Called in the child process after a fork syscall.  Releases locks acquired
  * by cthread_fork_prepare().  Deallocates cthread data structures which
  * described other threads in our parent.  Makes this thread the main thread.
- * 
- * The mach_init() routine must be called in the child before this routine.
  */
 {
 	pthread_t p = psaved_self;
@@ -119,7 +122,7 @@ void _cthread_fork_child()
 	mig_fork_child();
 	_malloc_fork_child();
 	p->kernel_thread = mach_thread_self();
-	p->reply_port = MACH_PORT_NULL;
+	p->reply_port = mach_reply_port();
 	p->mutexes = NULL;
 	p->cleanup_stack = NULL;
 	p->death = MACH_PORT_NULL;
@@ -127,11 +130,14 @@ void _cthread_fork_child()
 	p->detached |= _PTHREAD_CREATE_PARENT;
         _spin_unlock(&p->lock);
 
-        _cproc_fork_child();
+        fork_mach_init();
+	_pthread_fork_child(p);
+
+	_cproc_fork_child();
 
 	_lu_fork_child();
 
-	_pthread_fork_child();
+	_notify_fork_child();
 
 	__is_threaded = 0;
 

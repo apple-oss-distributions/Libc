@@ -3,19 +3,22 @@
  *
  * @APPLE_LICENSE_HEADER_START@
  * 
- * The contents of this file constitute Original Code as defined in and
- * are subject to the Apple Public Source License Version 1.1 (the
- * "License").  You may not use this file except in compliance with the
- * License.  Please obtain a copy of the License at
- * http://www.apple.com/publicsource and read it before using this file.
+ * Copyright (c) 1999-2003 Apple Computer, Inc.  All Rights Reserved.
  * 
- * This Original Code and all software distributed under the License are
- * distributed on an "AS IS" basis, WITHOUT WARRANTY OF ANY KIND, EITHER
+ * This file contains Original Code and/or Modifications of Original Code
+ * as defined in and that are subject to the Apple Public Source License
+ * Version 2.0 (the 'License'). You may not use this file except in
+ * compliance with the License. Please obtain a copy of the License at
+ * http://www.opensource.apple.com/apsl/ and read it before using this
+ * file.
+ * 
+ * The Original Code and all software distributed under the License are
+ * distributed on an 'AS IS' basis, WITHOUT WARRANTY OF ANY KIND, EITHER
  * EXPRESS OR IMPLIED, AND APPLE HEREBY DISCLAIMS ALL SUCH WARRANTIES,
  * INCLUDING WITHOUT LIMITATION, ANY WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE OR NON-INFRINGEMENT.  Please see the
- * License for the specific language governing rights and limitations
- * under the License.
+ * FITNESS FOR A PARTICULAR PURPOSE, QUIET ENJOYMENT OR NON-INFRINGEMENT.
+ * Please see the License for the specific language governing rights and
+ * limitations under the License.
  * 
  * @APPLE_LICENSE_HEADER_END@
  */
@@ -29,17 +32,36 @@
 #if defined(__DYNAMIC__)
 #include "mach-o/dyld.h" /* defines _dyld_lookup_and_bind() */
 #define STRINGIFY(a) # a
-#define DECLARE_VAR(var, type)	\
+#define DECLARE_VAR(var, type)					\
         static type * var ## _pointer = 0
+#define DECLARE_PROGNAME(var, type)				\
+        static type * var ## _pointer = 0;			\
+        static type _priv_ ## var = 0
 #define SETUP_VAR(var)						\
     if ( var ## _pointer == 0) {				\
         _dyld_lookup_and_bind( STRINGIFY(_ ## var),		\
                 (unsigned long *) & var ## _pointer, 0);	\
     }
+#define SETUP_PROGNAME(var)					\
+    if ( var ## _pointer == 0) {				\
+	if(NSIsSymbolNameDefined( STRINGIFY(_ ## var) ))	\
+	    _dyld_lookup_and_bind( STRINGIFY(_ ## var),		\
+                (unsigned long *) & var ## _pointer, 0);	\
+	else {							\
+	    char *progname = _dyld_get_image_name(0);		\
+	    if(_priv_ ## var = strrchr(progname, '/'))		\
+		_priv_ ## var ++;				\
+	    else						\
+		_priv_ ## var = progname;			\
+	    var ## _pointer = & _priv_ ## var;			\
+	}							\
+    }
 #define USE_VAR(var) (var ## _pointer)
 #else
 #define DECLARE_VAR(var, type) extern type var
+#define DECLARE_PROGNAME(var, type) DECLARE_VAR(var, type)
 #define SETUP_VAR(var)
+#define SETUP_PROGNAME(var) SETUP_VAR(var)
 #define USE_VAR(var) (& var)
 #endif
 
@@ -62,8 +84,8 @@ char ***_NSGetEnviron(void) {
 }
 
 char **_NSGetProgname(void) {
-    DECLARE_VAR(__progname, char *);
-    SETUP_VAR(__progname);
+    DECLARE_PROGNAME(__progname, char *);
+    SETUP_PROGNAME(__progname);
     return(USE_VAR(__progname));
 }
 
@@ -102,5 +124,3 @@ void *__eh_value_gcc_272 = (void *)0;
 
 /* This is what egcs uses for its global data pointer */
 void *__eh_global_dataptr = (void *)0;
-
-void *__keymgr_global[3] = { (void *)0 };

@@ -3,19 +3,22 @@
  *
  * @APPLE_LICENSE_HEADER_START@
  * 
- * The contents of this file constitute Original Code as defined in and
- * are subject to the Apple Public Source License Version 1.1 (the
- * "License").  You may not use this file except in compliance with the
- * License.  Please obtain a copy of the License at
- * http://www.apple.com/publicsource and read it before using this file.
+ * Copyright (c) 1999-2003 Apple Computer, Inc.  All Rights Reserved.
  * 
- * This Original Code and all software distributed under the License are
- * distributed on an "AS IS" basis, WITHOUT WARRANTY OF ANY KIND, EITHER
+ * This file contains Original Code and/or Modifications of Original Code
+ * as defined in and that are subject to the Apple Public Source License
+ * Version 2.0 (the 'License'). You may not use this file except in
+ * compliance with the License. Please obtain a copy of the License at
+ * http://www.opensource.apple.com/apsl/ and read it before using this
+ * file.
+ * 
+ * The Original Code and all software distributed under the License are
+ * distributed on an 'AS IS' basis, WITHOUT WARRANTY OF ANY KIND, EITHER
  * EXPRESS OR IMPLIED, AND APPLE HEREBY DISCLAIMS ALL SUCH WARRANTIES,
  * INCLUDING WITHOUT LIMITATION, ANY WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE OR NON-INFRINGEMENT.  Please see the
- * License for the specific language governing rights and limitations
- * under the License.
+ * FITNESS FOR A PARTICULAR PURPOSE, QUIET ENJOYMENT OR NON-INFRINGEMENT.
+ * Please see the License for the specific language governing rights and
+ * limitations under the License.
  * 
  * @APPLE_LICENSE_HEADER_END@
  */
@@ -80,11 +83,11 @@ mig_get_reply_port()
         pthread_t pself;
 #ifdef	CTHREADS_DEBUG
 	int d = cthread_debug;
-#endif	CTHREADS_DEBUG
+#endif	/* CTHREADS_DEBUG */
 
 #ifdef	CTHREADS_DEBUG
 	cthread_debug = FALSE;
-#endif	CTHREADS_DEBUG
+#endif	/* CTHREADS_DEBUG */
         pself = pthread_self();
         if ((pself != (pthread_t)NULL) && (pself->sig == _PTHREAD_SIG)) {
             if (pself->reply_port == MACH_PORT_NULL) {
@@ -96,7 +99,7 @@ mig_get_reply_port()
 	if (self == NO_CPROC) {
 #ifdef	CTHREADS_DEBUG
 		cthread_debug = d;
-#endif	CTHREADS_DEBUG
+#endif	/* CTHREADS_DEBUG */
 		return(_task_reply_port);
 	}
         if (self->reply_port == MACH_PORT_NULL) {
@@ -104,7 +107,7 @@ mig_get_reply_port()
         }
 #ifdef	CTHREADS_DEBUG
 	cthread_debug = d;
-#endif	CTHREADS_DEBUG
+#endif	/* CTHREADS_DEBUG */
 	return self->reply_port;
 }
 
@@ -121,11 +124,11 @@ mig_dealloc_reply_port(mach_port_t migport)
 	register mach_port_t port;
 #ifdef	CTHREADS_DEBUG
 	int d = cthread_debug;
-#endif	CTHREADS_DEBUG
+#endif	/* CTHREADS_DEBUG */
 
 #ifdef	CTHREADS_DEBUG
 	cthread_debug = FALSE;
-#endif	CTHREADS_DEBUG
+#endif	/* CTHREADS_DEBUG */
         pself = pthread_self();
         if ((pself != (pthread_t)NULL) && (pself->sig == _PTHREAD_SIG)) {
             port = pself->reply_port;
@@ -142,7 +145,7 @@ mig_dealloc_reply_port(mach_port_t migport)
 	if (self == NO_CPROC) {
 #ifdef	CTHREADS_DEBUG
 		cthread_debug = d;
-#endif	CTHREADS_DEBUG
+#endif	/* CTHREADS_DEBUG */
 		return;
 	}
 	ASSERT(self != NO_CPROC);
@@ -156,7 +159,7 @@ mig_dealloc_reply_port(mach_port_t migport)
 	}
 #ifdef	CTHREADS_DEBUG
 	cthread_debug = d;
-#endif	CTHREADS_DEBUG
+#endif	/* CTHREADS_DEBUG */
 }
 
 /*************************************************************

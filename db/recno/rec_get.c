@@ -1,26 +1,29 @@
 /*
- * Copyright (c) 1999 Apple Computer, Inc. All rights reserved.
+ * Copyright (c) 2003 Apple Computer, Inc. All rights reserved.
  *
  * @APPLE_LICENSE_HEADER_START@
  * 
- * The contents of this file constitute Original Code as defined in and
- * are subject to the Apple Public Source License Version 1.1 (the
- * "License").  You may not use this file except in compliance with the
- * License.  Please obtain a copy of the License at
- * http://www.apple.com/publicsource and read it before using this file.
+ * Copyright (c) 1999-2003 Apple Computer, Inc.  All Rights Reserved.
  * 
- * This Original Code and all software distributed under the License are
- * distributed on an "AS IS" basis, WITHOUT WARRANTY OF ANY KIND, EITHER
+ * This file contains Original Code and/or Modifications of Original Code
+ * as defined in and that are subject to the Apple Public Source License
+ * Version 2.0 (the 'License'). You may not use this file except in
+ * compliance with the License. Please obtain a copy of the License at
+ * http://www.opensource.apple.com/apsl/ and read it before using this
+ * file.
+ * 
+ * The Original Code and all software distributed under the License are
+ * distributed on an 'AS IS' basis, WITHOUT WARRANTY OF ANY KIND, EITHER
  * EXPRESS OR IMPLIED, AND APPLE HEREBY DISCLAIMS ALL SUCH WARRANTIES,
  * INCLUDING WITHOUT LIMITATION, ANY WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE OR NON-INFRINGEMENT.  Please see the
- * License for the specific language governing rights and limitations
- * under the License.
+ * FITNESS FOR A PARTICULAR PURPOSE, QUIET ENJOYMENT OR NON-INFRINGEMENT.
+ * Please see the License for the specific language governing rights and
+ * limitations under the License.
  * 
  * @APPLE_LICENSE_HEADER_END@
  */
-/*
- * Copyright (c) 1990, 1993
+/*-
+ * Copyright (c) 1990, 1993, 1994
  *	The Regents of the University of California.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -52,6 +55,10 @@
  * SUCH DAMAGE.
  */
 
+#if defined(LIBC_SCCS) && !defined(lint)
+static char sccsid[] = "@(#)rec_get.c	8.9 (Berkeley) 8/18/94";
+#endif /* LIBC_SCCS and not lint */
+#include <sys/cdefs.h>
 
 #include <sys/types.h>
 
@@ -108,7 +115,7 @@ __rec_get(dbp, key, data, flags)
 	 * original file.
 	 */
 	if (nrec > t->bt_nrecs) {
-		if (ISSET(t, R_EOF | R_INMEM))
+		if (F_ISSET(t, R_EOF | R_INMEM))
 			return (RET_SPECIAL);
 		if ((status = t->bt_irec(t, nrec)) != RET_SUCCESS)
 			return (status);
@@ -119,7 +126,7 @@ __rec_get(dbp, key, data, flags)
 		return (RET_ERROR);
 
 	status = __rec_ret(t, e, 0, NULL, data);
-	if (ISSET(t, B_DB_LOCK))
+	if (F_ISSET(t, B_DB_LOCK))
 		mpool_put(t->bt_mp, e->page, 0);
 	else
 		t->bt_pinned = e->page;
@@ -145,31 +152,38 @@ __rec_fpipe(t, top)
 	recno_t nrec;
 	size_t len;
 	int ch;
-	char *p;
+	u_char *p;
 
-	if (t->bt_dbufsz < t->bt_reclen) {
-		if ((t->bt_dbuf =
-		    (char *)realloc(t->bt_dbuf, t->bt_reclen)) == NULL)
+	if (t->bt_rdata.size < t->bt_reclen) {
+		t->bt_rdata.data = t->bt_rdata.data == NULL ?
+		    malloc(t->bt_reclen) :
+		    reallocf(t->bt_rdata.data, t->bt_reclen);
+		if (t->bt_rdata.data == NULL)
 			return (RET_ERROR);
-		t->bt_dbufsz = t->bt_reclen;
+		t->bt_rdata.size = t->bt_reclen;
 	}
-	data.data = t->bt_dbuf;
+	data.data = t->bt_rdata.data;
 	data.size = t->bt_reclen;
 
-	for (nrec = t->bt_nrecs; nrec < top; ++nrec) {
+	for (nrec = t->bt_nrecs; nrec < top;) {
 		len = t->bt_reclen;
-		for (p = t->bt_dbuf;; *p++ = ch)
-			if ((ch = getc(t->bt_rfp)) == EOF || !len--) {
-				if (__rec_iput(t, nrec, &data, 0)
-				    != RET_SUCCESS)
+		for (p = t->bt_rdata.data;; *p++ = ch)
+			if ((ch = getc(t->bt_rfp)) == EOF || !--len) {
+				if (ch != EOF)
+					*p = ch;
+				if (len != 0)
+					memset(p, t->bt_bval, len);
+				if (__rec_iput(t,
+				    nrec, &data, 0) != RET_SUCCESS)
 					return (RET_ERROR);
+				++nrec;
 				break;
 			}
 		if (ch == EOF)
 			break;
 	}
 	if (nrec < top) {
-		SET(t, R_EOF);
+		F_SET(t, R_EOF);
 		return (RET_SPECIAL);
 	}
 	return (RET_SUCCESS);
@@ -192,17 +206,18 @@ __rec_vpipe(t, top)
 {
 	DBT data;
 	recno_t nrec;
-	indx_t len;
+	size_t len;
 	size_t sz;
 	int bval, ch;
-	char *p;
+	u_char *p;
 
 	bval = t->bt_bval;
 	for (nrec = t->bt_nrecs; nrec < top; ++nrec) {
-		for (p = t->bt_dbuf, sz = t->bt_dbufsz;; *p++ = ch, --sz) {
+		for (p = t->bt_rdata.data,
+		    sz = t->bt_rdata.size;; *p++ = ch, --sz) {
 			if ((ch = getc(t->bt_rfp)) == EOF || ch == bval) {
-				data.data = t->bt_dbuf;
-				data.size = p - t->bt_dbuf;
+				data.data = t->bt_rdata.data;
+				data.size = p - (u_char *)t->bt_rdata.data;
 				if (ch == EOF && data.size == 0)
 					break;
 				if (__rec_iput(t, nrec, &data, 0)
@@ -211,19 +226,21 @@ __rec_vpipe(t, top)
 				break;
 			}
 			if (sz == 0) {
-				len = p - t->bt_dbuf;
-				t->bt_dbufsz += (sz = 256);
-				if ((t->bt_dbuf = (char *)realloc(t->bt_dbuf,
-				    t->bt_dbufsz)) == NULL)
+				len = p - (u_char *)t->bt_rdata.data;
+				t->bt_rdata.size += (sz = 256);
+				t->bt_rdata.data = t->bt_rdata.data == NULL ?
+				    malloc(t->bt_rdata.size) :
+				    reallocf(t->bt_rdata.data, t->bt_rdata.size);
+				if (t->bt_rdata.data == NULL)
 					return (RET_ERROR);
-				p = t->bt_dbuf + len;
+				p = (u_char *)t->bt_rdata.data + len;
 			}
 		}
 		if (ch == EOF)
 			break;
 	}
 	if (nrec < top) {
-		SET(t, R_EOF);
+		F_SET(t, R_EOF);
 		return (RET_SPECIAL);
 	}
 	return (RET_SUCCESS);
@@ -246,33 +263,36 @@ __rec_fmap(t, top)
 {
 	DBT data;
 	recno_t nrec;
-	caddr_t sp, ep;
+	u_char *sp, *ep, *p;
 	size_t len;
-	char *p;
 
-	if (t->bt_dbufsz < t->bt_reclen) {
-		if ((t->bt_dbuf =
-		    (char *)realloc(t->bt_dbuf, t->bt_reclen)) == NULL)
+	if (t->bt_rdata.size < t->bt_reclen) {
+		t->bt_rdata.data = t->bt_rdata.data == NULL ?
+		    malloc(t->bt_reclen) :
+		    reallocf(t->bt_rdata.data, t->bt_reclen);
+		if (t->bt_rdata.data == NULL)
 			return (RET_ERROR);
-		t->bt_dbufsz = t->bt_reclen;
+		t->bt_rdata.size = t->bt_reclen;
 	}
-	data.data = t->bt_dbuf;
+	data.data = t->bt_rdata.data;
 	data.size = t->bt_reclen;
 
-	sp = t->bt_cmap;
-	ep = t->bt_emap;
+	sp = (u_char *)t->bt_cmap;
+	ep = (u_char *)t->bt_emap;
 	for (nrec = t->bt_nrecs; nrec < top; ++nrec) {
 		if (sp >= ep) {
-			SET(t, R_EOF);
+			F_SET(t, R_EOF);
 			return (RET_SPECIAL);
 		}
 		len = t->bt_reclen;
-		for (p = t->bt_dbuf; sp < ep && len--; *p++ = *sp++);
-		memset(p, t->bt_bval, len);
+		for (p = t->bt_rdata.data;
+		    sp < ep && len > 0; *p++ = *sp++, --len);
+		if (len != 0)
+			memset(p, t->bt_bval, len);
 		if (__rec_iput(t, nrec, &data, 0) != RET_SUCCESS)
 			return (RET_ERROR);
 	}
-	t->bt_cmap = sp;
+	t->bt_cmap = (caddr_t)sp;
 	return (RET_SUCCESS);
 }
 
@@ -292,25 +312,25 @@ __rec_vmap(t, top)
 	recno_t top;
 {
 	DBT data;
-	caddr_t sp, ep;
+	u_char *sp, *ep;
 	recno_t nrec;
 	int bval;
 
-	sp = t->bt_cmap;
-	ep = t->bt_emap;
+	sp = (u_char *)t->bt_cmap;
+	ep = (u_char *)t->bt_emap;
 	bval = t->bt_bval;
 
 	for (nrec = t->bt_nrecs; nrec < top; ++nrec) {
 		if (sp >= ep) {
-			SET(t, R_EOF);
+			F_SET(t, R_EOF);
 			return (RET_SPECIAL);
 		}
 		for (data.data = sp; sp < ep && *sp != bval; ++sp);
-		data.size = sp - (caddr_t)data.data;
+		data.size = sp - (u_char *)data.data;
 		if (__rec_iput(t, nrec, &data, 0) != RET_SUCCESS)
 			return (RET_ERROR);
 		++sp;
 	}
-	t->bt_cmap = sp;
+	t->bt_cmap = (caddr_t)sp;
 	return (RET_SUCCESS);
 }

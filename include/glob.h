@@ -3,19 +3,22 @@
  *
  * @APPLE_LICENSE_HEADER_START@
  * 
- * The contents of this file constitute Original Code as defined in and
- * are subject to the Apple Public Source License Version 1.1 (the
- * "License").  You may not use this file except in compliance with the
- * License.  Please obtain a copy of the License at
- * http://www.apple.com/publicsource and read it before using this file.
+ * Copyright (c) 1999-2003 Apple Computer, Inc.  All Rights Reserved.
  * 
- * This Original Code and all software distributed under the License are
- * distributed on an "AS IS" basis, WITHOUT WARRANTY OF ANY KIND, EITHER
+ * This file contains Original Code and/or Modifications of Original Code
+ * as defined in and that are subject to the Apple Public Source License
+ * Version 2.0 (the 'License'). You may not use this file except in
+ * compliance with the License. Please obtain a copy of the License at
+ * http://www.opensource.apple.com/apsl/ and read it before using this
+ * file.
+ * 
+ * The Original Code and all software distributed under the License are
+ * distributed on an 'AS IS' basis, WITHOUT WARRANTY OF ANY KIND, EITHER
  * EXPRESS OR IMPLIED, AND APPLE HEREBY DISCLAIMS ALL SUCH WARRANTIES,
  * INCLUDING WITHOUT LIMITATION, ANY WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE OR NON-INFRINGEMENT.  Please see the
- * License for the specific language governing rights and limitations
- * under the License.
+ * FITNESS FOR A PARTICULAR PURPOSE, QUIET ENJOYMENT OR NON-INFRINGEMENT.
+ * Please see the License for the specific language governing rights and
+ * limitations under the License.
  * 
  * @APPLE_LICENSE_HEADER_END@
  */
@@ -70,18 +73,18 @@ typedef struct {
 	int gl_flags;		/* Copy of flags parameter to glob. */
 	char **gl_pathv;	/* List of paths matching pattern. */
 				/* Copy of errfunc parameter to glob. */
-	int (*gl_errfunc) __P((const char *, int));
+	int (*gl_errfunc)(const char *, int);
 
 	/*
 	 * Alternate filesystem access methods for glob; replacement
 	 * versions of closedir(3), readdir(3), opendir(3), stat(2)
 	 * and lstat(2).
 	 */
-	void (*gl_closedir) __P((void *));
-	struct dirent *(*gl_readdir) __P((void *));	
-	void *(*gl_opendir) __P((const char *));
-	int (*gl_lstat) __P((const char *, struct stat *));
-	int (*gl_stat) __P((const char *, struct stat *));
+	void (*gl_closedir)(void *);
+	struct dirent *(*gl_readdir)(void *);	
+	void *(*gl_opendir)(const char *);
+	int (*gl_lstat)(const char *, struct stat *);
+	int (*gl_stat)(const char *, struct stat *);
 } glob_t;
 
 #define	GLOB_APPEND	0x0001	/* Append to output from previous call. */
@@ -104,8 +107,8 @@ typedef struct {
 #define	GLOB_ABEND	(-2)	/* Unignored error. */
 
 __BEGIN_DECLS
-int	glob __P((const char *, int, int (*)(const char *, int), glob_t *));
-void	globfree __P((glob_t *));
+int	glob(const char *, int, int (*)(const char *, int), glob_t *);
+void	globfree(glob_t *);
 __END_DECLS
 
 #endif /* !_GLOB_H_ */

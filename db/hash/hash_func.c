@@ -1,25 +1,28 @@
 /*
- * Copyright (c) 1999 Apple Computer, Inc. All rights reserved.
+ * Copyright (c) 2003 Apple Computer, Inc. All rights reserved.
  *
  * @APPLE_LICENSE_HEADER_START@
  * 
- * The contents of this file constitute Original Code as defined in and
- * are subject to the Apple Public Source License Version 1.1 (the
- * "License").  You may not use this file except in compliance with the
- * License.  Please obtain a copy of the License at
- * http://www.apple.com/publicsource and read it before using this file.
+ * Copyright (c) 1999-2003 Apple Computer, Inc.  All Rights Reserved.
  * 
- * This Original Code and all software distributed under the License are
- * distributed on an "AS IS" basis, WITHOUT WARRANTY OF ANY KIND, EITHER
+ * This file contains Original Code and/or Modifications of Original Code
+ * as defined in and that are subject to the Apple Public Source License
+ * Version 2.0 (the 'License'). You may not use this file except in
+ * compliance with the License. Please obtain a copy of the License at
+ * http://www.opensource.apple.com/apsl/ and read it before using this
+ * file.
+ * 
+ * The Original Code and all software distributed under the License are
+ * distributed on an 'AS IS' basis, WITHOUT WARRANTY OF ANY KIND, EITHER
  * EXPRESS OR IMPLIED, AND APPLE HEREBY DISCLAIMS ALL SUCH WARRANTIES,
  * INCLUDING WITHOUT LIMITATION, ANY WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE OR NON-INFRINGEMENT.  Please see the
- * License for the specific language governing rights and limitations
- * under the License.
+ * FITNESS FOR A PARTICULAR PURPOSE, QUIET ENJOYMENT OR NON-INFRINGEMENT.
+ * Please see the License for the specific language governing rights and
+ * limitations under the License.
  * 
  * @APPLE_LICENSE_HEADER_END@
  */
-/*
+/*-
  * Copyright (c) 1990, 1993
  *	The Regents of the University of California.  All rights reserved.
  *
@@ -55,6 +58,10 @@
  * SUCH DAMAGE.
  */
 
+#if defined(LIBC_SCCS) && !defined(lint)
+static char sccsid[] = "@(#)hash_func.c	8.2 (Berkeley) 2/21/94";
+#endif /* LIBC_SCCS and not lint */
+#include <sys/cdefs.h>
 
 #include <sys/types.h>
 
@@ -63,13 +70,13 @@
 #include "page.h"
 #include "extern.h"
 
-static u_int32_t hash1 __P((const void *, size_t));
-static u_int32_t hash2 __P((const void *, size_t));
-static u_int32_t hash3 __P((const void *, size_t));
-static u_int32_t hash4 __P((const void *, size_t));
+static u_int32_t hash1(const void *, size_t) ;
+static u_int32_t hash2(const void *, size_t) ;
+static u_int32_t hash3(const void *, size_t) ;
+static u_int32_t hash4(const void *, size_t);
 
 /* Global default hash function */
-u_int32_t (*__default_hash) __P((const void *, size_t)) = hash4;
+u_int32_t (*__default_hash)(const void *, size_t) = hash4;
 
 /*
  * HASH FUNCTIONS
@@ -86,10 +93,10 @@ u_int32_t (*__default_hash) __P((const void *, size_t)) = hash4;
 static u_int32_t
 hash1(keyarg, len)
 	const void *keyarg;
-	register size_t len;
+	size_t len;
 {
-	register const u_char *key;
-	register u_int32_t h;
+	const u_char *key;
+	u_int32_t h;
 
 	/* Convert string to integer */
 	for (key = keyarg, h = 0; len--;)
@@ -108,9 +115,9 @@ hash2(keyarg, len)
 	const void *keyarg;
 	size_t len;
 {
-	register const u_char *e, *key;
-	register u_int32_t h;
-	register u_char c;
+	const u_char *e, *key;
+	u_int32_t h;
+	u_char c;
 
 	key = keyarg;
 	e = key + len;
@@ -135,11 +142,11 @@ hash2(keyarg, len)
 static u_int32_t
 hash3(keyarg, len)
 	const void *keyarg;
-	register size_t len;
+	size_t len;
 {
-	register const u_char *key;
-	register size_t loop;
-	register u_int32_t h;
+	const u_char *key;
+	size_t loop;
+	u_int32_t h;
 
 #define HASHC   h = *key++ + 65599 * h
 
@@ -183,11 +190,11 @@ hash3(keyarg, len)
 static u_int32_t
 hash4(keyarg, len)
 	const void *keyarg;
-	register size_t len;
+	size_t len;
 {
-	register const u_char *key;
-	register size_t loop;
-	register u_int32_t h;
+	const u_char *key;
+	size_t loop;
+	u_int32_t h;
 
 #define HASH4a   h = (h << 5) - h + *key++;
 #define HASH4b   h = (h << 5) + h + *key++;

@@ -1,26 +1,29 @@
 /*
- * Copyright (c) 1999 Apple Computer, Inc. All rights reserved.
+ * Copyright (c) 2003 Apple Computer, Inc. All rights reserved.
  *
  * @APPLE_LICENSE_HEADER_START@
  * 
- * The contents of this file constitute Original Code as defined in and
- * are subject to the Apple Public Source License Version 1.1 (the
- * "License").  You may not use this file except in compliance with the
- * License.  Please obtain a copy of the License at
- * http://www.apple.com/publicsource and read it before using this file.
+ * Copyright (c) 1999-2003 Apple Computer, Inc.  All Rights Reserved.
  * 
- * This Original Code and all software distributed under the License are
- * distributed on an "AS IS" basis, WITHOUT WARRANTY OF ANY KIND, EITHER
+ * This file contains Original Code and/or Modifications of Original Code
+ * as defined in and that are subject to the Apple Public Source License
+ * Version 2.0 (the 'License'). You may not use this file except in
+ * compliance with the License. Please obtain a copy of the License at
+ * http://www.opensource.apple.com/apsl/ and read it before using this
+ * file.
+ * 
+ * The Original Code and all software distributed under the License are
+ * distributed on an 'AS IS' basis, WITHOUT WARRANTY OF ANY KIND, EITHER
  * EXPRESS OR IMPLIED, AND APPLE HEREBY DISCLAIMS ALL SUCH WARRANTIES,
  * INCLUDING WITHOUT LIMITATION, ANY WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE OR NON-INFRINGEMENT.  Please see the
- * License for the specific language governing rights and limitations
- * under the License.
+ * FITNESS FOR A PARTICULAR PURPOSE, QUIET ENJOYMENT OR NON-INFRINGEMENT.
+ * Please see the License for the specific language governing rights and
+ * limitations under the License.
  * 
  * @APPLE_LICENSE_HEADER_END@
  */
-/*
- * Copyright (c) 1990, 1993
+/*-
+ * Copyright (c) 1990, 1993, 1994
  *	The Regents of the University of California.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -52,6 +55,10 @@
  * SUCH DAMAGE.
  */
 
+#if defined(LIBC_SCCS) && !defined(lint)
+static char sccsid[] = "@(#)bt_page.c	8.3 (Berkeley) 7/14/94";
+#endif /* LIBC_SCCS and not lint */
+#include <sys/cdefs.h>
 
 #include <sys/types.h>
 
@@ -61,7 +68,8 @@
 #include "btree.h"
 
 /*
- * __BT_FREE -- Put a page on the freelist.
+ * __bt_free --
+ *	Put a page on the freelist.
  *
  * Parameters:
  *	t:	tree
@@ -69,23 +77,28 @@
  *
  * Returns:
  *	RET_ERROR, RET_SUCCESS
+ *
+ * Side-effect:
+ *	mpool_put's the page.
  */
 int
 __bt_free(t, h)
 	BTREE *t;
 	PAGE *h;
 {
-	/* Insert the page at the start of the free list. */
+	/* Insert the page at the head of the free list. */
 	h->prevpg = P_INVALID;
 	h->nextpg = t->bt_free;
 	t->bt_free = h->pgno;
+	F_SET(t, B_METADIRTY);
 
 	/* Make sure the page gets written back. */
 	return (mpool_put(t->bt_mp, h, MPOOL_DIRTY));
 }
 
 /*
- * __BT_NEW -- Get a new page, preferably from the freelist.
+ * __bt_new --
+ *	Get a new page, preferably from the freelist.
  *
  * Parameters:
  *	t:	tree
@@ -103,9 +116,10 @@ __bt_new(t, npg)
 
 	if (t->bt_free != P_INVALID &&
 	    (h = mpool_get(t->bt_mp, t->bt_free, 0)) != NULL) {
-			*npg = t->bt_free;
-			t->bt_free = h->nextpg;
-			return (h);
+		*npg = t->bt_free;
+		t->bt_free = h->nextpg;
+		F_SET(t, B_METADIRTY);
+		return (h);
 	}
 	return (mpool_new(t->bt_mp, npg));
 }

@@ -3,19 +3,22 @@
  *
  * @APPLE_LICENSE_HEADER_START@
  * 
- * The contents of this file constitute Original Code as defined in and
- * are subject to the Apple Public Source License Version 1.1 (the
- * "License").  You may not use this file except in compliance with the
- * License.  Please obtain a copy of the License at
- * http://www.apple.com/publicsource and read it before using this file.
+ * Copyright (c) 1999-2003 Apple Computer, Inc.  All Rights Reserved.
  * 
- * This Original Code and all software distributed under the License are
- * distributed on an "AS IS" basis, WITHOUT WARRANTY OF ANY KIND, EITHER
+ * This file contains Original Code and/or Modifications of Original Code
+ * as defined in and that are subject to the Apple Public Source License
+ * Version 2.0 (the 'License'). You may not use this file except in
+ * compliance with the License. Please obtain a copy of the License at
+ * http://www.opensource.apple.com/apsl/ and read it before using this
+ * file.
+ * 
+ * The Original Code and all software distributed under the License are
+ * distributed on an 'AS IS' basis, WITHOUT WARRANTY OF ANY KIND, EITHER
  * EXPRESS OR IMPLIED, AND APPLE HEREBY DISCLAIMS ALL SUCH WARRANTIES,
  * INCLUDING WITHOUT LIMITATION, ANY WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE OR NON-INFRINGEMENT.  Please see the
- * License for the specific language governing rights and limitations
- * under the License.
+ * FITNESS FOR A PARTICULAR PURPOSE, QUIET ENJOYMENT OR NON-INFRINGEMENT.
+ * Please see the License for the specific language governing rights and
+ * limitations under the License.
  * 
  * @APPLE_LICENSE_HEADER_END@
  */
@@ -67,29 +70,32 @@ extern __const char *__const sys_siglist[NSIG];
 #endif
 
 __BEGIN_DECLS
-int	raise __P((int));
+int	raise(int);
 #ifndef	_ANSI_SOURCE
-int	kill __P((pid_t, int));
-int	sigaction __P((int, const struct sigaction *, struct sigaction *));
-int	sigaddset __P((sigset_t *, int));
-int	sigdelset __P((sigset_t *, int));
-int	sigemptyset __P((sigset_t *));
-int	sigfillset __P((sigset_t *));
-int	sigismember __P((const sigset_t *, int));
-int	sigpending __P((sigset_t *));
-int	sigprocmask __P((int, const sigset_t *, sigset_t *));
-int	sigsuspend __P((const sigset_t *));
+int	kill(pid_t, int);
+int	sigaction(int, const struct sigaction *, struct sigaction *);
+int	sigaddset(sigset_t *, int);
+int	sigaltstack(const struct sigaltstack *, struct sigaltstack *);
+int	sigdelset(sigset_t *, int);
+int	sigemptyset(sigset_t *);
+int	sigfillset(sigset_t *);
+int	sigismember(const sigset_t *, int);
+int	sigpending(sigset_t *);
+int	sigprocmask(int, const sigset_t *, sigset_t *);
+int	sigsuspend(const sigset_t *);
+int	sigwait(const sigset_t *, int *);
 #ifndef _POSIX_SOURCE
-int	killpg __P((pid_t, int));
-int	sigblock __P((int));
-int	siginterrupt __P((int, int));
-int	sighold __P((int));
-int	sigrelse __P((int));
-int	sigpause __P((int));
-int	sigreturn __P((struct sigcontext *));
-int	sigsetmask __P((int));
-int	sigvec __P((int, struct sigvec *, struct sigvec *));
-void	psignal __P((unsigned int, const char *));
+int	killpg(pid_t, int);
+int	sigblock(int);
+int	siginterrupt(int, int);
+int	sighold(int);
+int	sigrelse(int);
+int	sigpause(int);
+int	sigreturn(struct sigcontext *);
+int	sigsetmask(int);
+int	sigvec(int, struct sigvec *, struct sigvec *);
+void	psignal(unsigned int, const char *);
+
 #endif	/* !_POSIX_SOURCE */
 #endif	/* !_ANSI_SOURCE */
 __END_DECLS

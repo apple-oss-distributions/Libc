@@ -1,25 +1,28 @@
 /*
- * Copyright (c) 1999 Apple Computer, Inc. All rights reserved.
+ * Copyright (c) 2003 Apple Computer, Inc. All rights reserved.
  *
  * @APPLE_LICENSE_HEADER_START@
  * 
- * The contents of this file constitute Original Code as defined in and
- * are subject to the Apple Public Source License Version 1.1 (the
- * "License").  You may not use this file except in compliance with the
- * License.  Please obtain a copy of the License at
- * http://www.apple.com/publicsource and read it before using this file.
+ * Copyright (c) 1999-2003 Apple Computer, Inc.  All Rights Reserved.
  * 
- * This Original Code and all software distributed under the License are
- * distributed on an "AS IS" basis, WITHOUT WARRANTY OF ANY KIND, EITHER
+ * This file contains Original Code and/or Modifications of Original Code
+ * as defined in and that are subject to the Apple Public Source License
+ * Version 2.0 (the 'License'). You may not use this file except in
+ * compliance with the License. Please obtain a copy of the License at
+ * http://www.opensource.apple.com/apsl/ and read it before using this
+ * file.
+ * 
+ * The Original Code and all software distributed under the License are
+ * distributed on an 'AS IS' basis, WITHOUT WARRANTY OF ANY KIND, EITHER
  * EXPRESS OR IMPLIED, AND APPLE HEREBY DISCLAIMS ALL SUCH WARRANTIES,
  * INCLUDING WITHOUT LIMITATION, ANY WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE OR NON-INFRINGEMENT.  Please see the
- * License for the specific language governing rights and limitations
- * under the License.
+ * FITNESS FOR A PARTICULAR PURPOSE, QUIET ENJOYMENT OR NON-INFRINGEMENT.
+ * Please see the License for the specific language governing rights and
+ * limitations under the License.
  * 
  * @APPLE_LICENSE_HEADER_END@
  */
-/*
+/*-
  * Copyright (c) 1991, 1993
  *	The Regents of the University of California.  All rights reserved.
  *
@@ -50,24 +53,27 @@
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
+ *
+ *	@(#)extern.h	8.3 (Berkeley) 6/4/94
+ * $FreeBSD: src/lib/libc/db/recno/extern.h,v 1.2 2002/03/21 22:46:28 obrien Exp $
  */
 
-#include "bt_extern.h"
+#include "../btree/extern.h"
 
-int	 __rec_close __P((DB *));
-int	 __rec_delete __P((const DB *, const DBT *, u_int));
-int	 __rec_dleaf __P((BTREE *, PAGE *, indx_t));
-int	 __rec_fd __P((const DB *));
-int	 __rec_fmap __P((BTREE *, recno_t));
-int	 __rec_fout __P((BTREE *));
-int	 __rec_fpipe __P((BTREE *, recno_t));
-int	 __rec_get __P((const DB *, const DBT *, DBT *, u_int));
-int	 __rec_iput __P((BTREE *, recno_t, const DBT *, u_int));
-int	 __rec_put __P((const DB *dbp, DBT *, const DBT *, u_int));
-int	 __rec_ret __P((BTREE *, EPG *, recno_t, DBT *, DBT *));
-EPG	*__rec_search __P((BTREE *, recno_t, enum SRCHOP));
-int	 __rec_seq __P((const DB *, DBT *, DBT *, u_int));
-int	 __rec_sync __P((const DB *, u_int));
-int	 __rec_vmap __P((BTREE *, recno_t));
-int	 __rec_vout __P((BTREE *));
-int	 __rec_vpipe __P((BTREE *, recno_t));
+int	 __rec_close(DB *);
+int	 __rec_delete(const DB *, const DBT *, u_int);
+int	 __rec_dleaf(BTREE *, PAGE *, u_int32_t);
+int	 __rec_fd(const DB *);
+int	 __rec_fmap(BTREE *, recno_t);
+int	 __rec_fout(BTREE *);
+int	 __rec_fpipe(BTREE *, recno_t);
+int	 __rec_get(const DB *, const DBT *, DBT *, u_int);
+int	 __rec_iput(BTREE *, recno_t, const DBT *, u_int);
+int	 __rec_put(const DB *dbp, DBT *, const DBT *, u_int);
+int	 __rec_ret(BTREE *, EPG *, recno_t, DBT *, DBT *);
+EPG	*__rec_search(BTREE *, recno_t, enum SRCHOP);
+int	 __rec_seq(const DB *, DBT *, DBT *, u_int);
+int	 __rec_sync(const DB *, u_int);
+int	 __rec_vmap(BTREE *, recno_t);
+int	 __rec_vout(BTREE *);
+int	 __rec_vpipe(BTREE *, recno_t);

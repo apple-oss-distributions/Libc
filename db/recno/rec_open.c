@@ -1,26 +1,29 @@
 /*
- * Copyright (c) 1999 Apple Computer, Inc. All rights reserved.
+ * Copyright (c) 2003 Apple Computer, Inc. All rights reserved.
  *
  * @APPLE_LICENSE_HEADER_START@
  * 
- * The contents of this file constitute Original Code as defined in and
- * are subject to the Apple Public Source License Version 1.1 (the
- * "License").  You may not use this file except in compliance with the
- * License.  Please obtain a copy of the License at
- * http://www.apple.com/publicsource and read it before using this file.
+ * Copyright (c) 1999-2003 Apple Computer, Inc.  All Rights Reserved.
  * 
- * This Original Code and all software distributed under the License are
- * distributed on an "AS IS" basis, WITHOUT WARRANTY OF ANY KIND, EITHER
+ * This file contains Original Code and/or Modifications of Original Code
+ * as defined in and that are subject to the Apple Public Source License
+ * Version 2.0 (the 'License'). You may not use this file except in
+ * compliance with the License. Please obtain a copy of the License at
+ * http://www.opensource.apple.com/apsl/ and read it before using this
+ * file.
+ * 
+ * The Original Code and all software distributed under the License are
+ * distributed on an 'AS IS' basis, WITHOUT WARRANTY OF ANY KIND, EITHER
  * EXPRESS OR IMPLIED, AND APPLE HEREBY DISCLAIMS ALL SUCH WARRANTIES,
  * INCLUDING WITHOUT LIMITATION, ANY WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE OR NON-INFRINGEMENT.  Please see the
- * License for the specific language governing rights and limitations
- * under the License.
+ * FITNESS FOR A PARTICULAR PURPOSE, QUIET ENJOYMENT OR NON-INFRINGEMENT.
+ * Please see the License for the specific language governing rights and
+ * limitations under the License.
  * 
  * @APPLE_LICENSE_HEADER_END@
  */
-/*
- * Copyright (c) 1990, 1993
+/*-
+ * Copyright (c) 1990, 1993, 1994
  *	The Regents of the University of California.  All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
@@ -55,12 +58,14 @@
  * SUCH DAMAGE.
  */
 
+#if defined(LIBC_SCCS) && !defined(lint)
+static char sccsid[] = "@(#)rec_open.c	8.10 (Berkeley) 9/1/94";
+#endif /* LIBC_SCCS and not lint */
+#include <sys/cdefs.h>
 
 #include <sys/types.h>
+#include <sys/mman.h>
 #include <sys/stat.h>
-
-#include <mach/mach.h>
-#include <mach/mach_traps.h>
 
 #include <errno.h>
 #include <fcntl.h>
@@ -118,7 +123,7 @@ __rec_open(fname, flags, mode, openinfo, dflags)
 	t = dbp->internal;
 	if (openinfo) {
 		if (openinfo->flags & R_FIXEDLEN) {
-			SET(t, R_FIXLEN);
+			F_SET(t, R_FIXLEN);
 			t->bt_reclen = openinfo->reclen;
 			if (t->bt_reclen == 0)
 				goto einval;
@@ -127,12 +132,11 @@ __rec_open(fname, flags, mode, openinfo, dflags)
 	} else
 		t->bt_bval = '\n';
 
-	SET(t, R_RECNO);
+	F_SET(t, R_RECNO);
 	if (fname == NULL)
-		SET(t, R_EOF | R_INMEM);
+		F_SET(t, R_EOF | R_INMEM);
 	else
 		t->bt_rfd = rfd;
-	t->bt_rcursor = 0;
 
 	if (fname != NULL) {
 		/*
@@ -144,20 +148,20 @@ __rec_open(fname, flags, mode, openinfo, dflags)
 		if (lseek(rfd, (off_t)0, SEEK_CUR) == -1 && errno == ESPIPE) {
 			switch (flags & O_ACCMODE) {
 			case O_RDONLY:
-				SET(t, R_RDONLY);
+				F_SET(t, R_RDONLY);
 				break;
 			default:
 				goto einval;
 			}
 slow:			if ((t->bt_rfp = fdopen(rfd, "r")) == NULL)
 				goto err;
-			SET(t, R_CLOSEFP);
+			F_SET(t, R_CLOSEFP);
 			t->bt_irec =
-			    ISSET(t, R_FIXLEN) ? __rec_fpipe : __rec_vpipe;
+			    F_ISSET(t, R_FIXLEN) ? __rec_fpipe : __rec_vpipe;
 		} else {
 			switch (flags & O_ACCMODE) {
 			case O_RDONLY:
-				SET(t, R_RDONLY);
+				F_SET(t, R_RDONLY);
 				break;
 			case O_RDWR:
 				break;
@@ -177,21 +181,29 @@ slow:			if ((t->bt_rfp = fdopen(rfd, "r")) == NULL)
 			 * fails if the file is too large.
 			 */
 			if (sb.st_size == 0)
-				SET(t, R_EOF);
+				F_SET(t, R_EOF);
 			else {
+#ifdef MMAP_NOT_AVAILABLE
+				/*
+				 * XXX
+				 * Mmap doesn't work correctly on many current
+				 * systems.  In particular, it can fail subtly,
+				 * with cache coherency problems.  Don't use it
+				 * for now.
+				 */
 				t->bt_msize = sb.st_size;
-				if ( (map_fd(rfd, 0, (vm_offset_t *)
-				    &t->bt_smap, TRUE, t->bt_msize)
-				     != KERN_SUCCESS)
-				||   (vm_protect(mach_task_self(), (vm_offset_t)
-				    t->bt_smap,  t->bt_msize, TRUE,
-				    VM_PROT_READ) != KERN_SUCCESS) )
+				if ((t->bt_smap = mmap(NULL, t->bt_msize,
+				    PROT_READ, MAP_PRIVATE, rfd,
+				    (off_t)0)) == MAP_FAILED)
 					goto slow;
 				t->bt_cmap = t->bt_smap;
 				t->bt_emap = t->bt_smap + sb.st_size;
-				t->bt_irec = ISSET(t, R_FIXLEN) ?
+				t->bt_irec = F_ISSET(t, R_FIXLEN) ?
 				    __rec_fmap : __rec_vmap;
-				SET(t, R_MEMMAPPED);
+				F_SET(t, R_MEMMAPPED);
+#else
+				goto slow;
+#endif
 			}
 		}
 	}
@@ -209,13 +221,14 @@ slow:			if ((t->bt_rfp = fdopen(rfd, "r")) == NULL)
 	if ((h = mpool_get(t->bt_mp, P_ROOT, 0)) == NULL)
 		goto err;
 	if ((h->flags & P_TYPE) == P_BLEAF) {
-		h->flags = h->flags & ~P_TYPE | P_RLEAF;
+		F_CLR(h, P_TYPE);
+		F_SET(h, P_RLEAF);
 		mpool_put(t->bt_mp, h, MPOOL_DIRTY);
 	} else
 		mpool_put(t->bt_mp, h, 0);
 
 	if (openinfo && openinfo->flags & R_SNAPSHOT &&
-	    !ISSET(t, R_EOF | R_INMEM) &&
+	    !F_ISSET(t, R_EOF | R_INMEM) &&
 	    t->bt_irec(t, MAX_REC_NUMBER) == RET_ERROR)
                 goto err;
 	return (dbp);
@@ -245,7 +258,7 @@ __rec_fd(dbp)
 	}
 
 	/* In-memory database can't have a file descriptor. */
-	if (ISSET(t, R_INMEM)) {
+	if (F_ISSET(t, R_INMEM)) {
 		errno = ENOENT;
 		return (-1);
 	}

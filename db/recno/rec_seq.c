@@ -1,26 +1,29 @@
 /*
- * Copyright (c) 1999 Apple Computer, Inc. All rights reserved.
+ * Copyright (c) 2003 Apple Computer, Inc. All rights reserved.
  *
  * @APPLE_LICENSE_HEADER_START@
  * 
- * The contents of this file constitute Original Code as defined in and
- * are subject to the Apple Public Source License Version 1.1 (the
- * "License").  You may not use this file except in compliance with the
- * License.  Please obtain a copy of the License at
- * http://www.apple.com/publicsource and read it before using this file.
+ * Copyright (c) 1999-2003 Apple Computer, Inc.  All Rights Reserved.
  * 
- * This Original Code and all software distributed under the License are
- * distributed on an "AS IS" basis, WITHOUT WARRANTY OF ANY KIND, EITHER
+ * This file contains Original Code and/or Modifications of Original Code
+ * as defined in and that are subject to the Apple Public Source License
+ * Version 2.0 (the 'License'). You may not use this file except in
+ * compliance with the License. Please obtain a copy of the License at
+ * http://www.opensource.apple.com/apsl/ and read it before using this
+ * file.
+ * 
+ * The Original Code and all software distributed under the License are
+ * distributed on an 'AS IS' basis, WITHOUT WARRANTY OF ANY KIND, EITHER
  * EXPRESS OR IMPLIED, AND APPLE HEREBY DISCLAIMS ALL SUCH WARRANTIES,
  * INCLUDING WITHOUT LIMITATION, ANY WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE OR NON-INFRINGEMENT.  Please see the
- * License for the specific language governing rights and limitations
- * under the License.
+ * FITNESS FOR A PARTICULAR PURPOSE, QUIET ENJOYMENT OR NON-INFRINGEMENT.
+ * Please see the License for the specific language governing rights and
+ * limitations under the License.
  * 
  * @APPLE_LICENSE_HEADER_END@
  */
-/*
- * Copyright (c) 1991, 1993
+/*-
+ * Copyright (c) 1991, 1993, 1994
  *	The Regents of the University of California.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -52,7 +55,7 @@
  * SUCH DAMAGE.
  */
 
-
+#include <sys/cdefs.h>
 #include <sys/types.h>
 
 #include <errno.h>
@@ -100,8 +103,8 @@ __rec_seq(dbp, key, data, flags)
 			goto einval;
 		break;
 	case R_NEXT:
-		if (ISSET(t, B_SEQINIT)) {
-			nrec = t->bt_rcursor + 1;
+		if (F_ISSET(&t->bt_cursor, CURS_INIT)) {
+			nrec = t->bt_cursor.rcursor + 1;
 			break;
 		}
 		/* FALLTHROUGH */
@@ -109,14 +112,14 @@ __rec_seq(dbp, key, data, flags)
 		nrec = 1;
 		break;
 	case R_PREV:
-		if (ISSET(t, B_SEQINIT)) {
-			if ((nrec = t->bt_rcursor - 1) == 0)
+		if (F_ISSET(&t->bt_cursor, CURS_INIT)) {
+			if ((nrec = t->bt_cursor.rcursor - 1) == 0)
 				return (RET_SPECIAL);
 			break;
 		}
 		/* FALLTHROUGH */
 	case R_LAST:
-		if (!ISSET(t, R_EOF | R_INMEM) &&
+		if (!F_ISSET(t, R_EOF | R_INMEM) &&
 		    t->bt_irec(t, MAX_REC_NUMBER) == RET_ERROR)
 			return (RET_ERROR);
 		nrec = t->bt_nrecs;
@@ -127,7 +130,7 @@ einval:		errno = EINVAL;
 	}
 	
 	if (t->bt_nrecs == 0 || nrec > t->bt_nrecs) {
-		if (!ISSET(t, R_EOF | R_INMEM) &&
+		if (!F_ISSET(t, R_EOF | R_INMEM) &&
 		    (status = t->bt_irec(t, nrec)) != RET_SUCCESS)
 			return (status);
 		if (t->bt_nrecs == 0 || nrec > t->bt_nrecs)
@@ -137,11 +140,11 @@ einval:		errno = EINVAL;
 	if ((e = __rec_search(t, nrec - 1, SEARCH)) == NULL)
 		return (RET_ERROR);
 
-	SET(t, B_SEQINIT);
-	t->bt_rcursor = nrec;
+	F_SET(&t->bt_cursor, CURS_INIT);
+	t->bt_cursor.rcursor = nrec;
 
 	status = __rec_ret(t, e, nrec, key, data);
-	if (ISSET(t, B_DB_LOCK))
+	if (F_ISSET(t, B_DB_LOCK))
 		mpool_put(t->bt_mp, e->page, 0);
 	else
 		t->bt_pinned = e->page;

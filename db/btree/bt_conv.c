@@ -1,26 +1,29 @@
 /*
- * Copyright (c) 1999 Apple Computer, Inc. All rights reserved.
+ * Copyright (c) 2003 Apple Computer, Inc. All rights reserved.
  *
  * @APPLE_LICENSE_HEADER_START@
  * 
- * The contents of this file constitute Original Code as defined in and
- * are subject to the Apple Public Source License Version 1.1 (the
- * "License").  You may not use this file except in compliance with the
- * License.  Please obtain a copy of the License at
- * http://www.apple.com/publicsource and read it before using this file.
+ * Copyright (c) 1999-2003 Apple Computer, Inc.  All Rights Reserved.
  * 
- * This Original Code and all software distributed under the License are
- * distributed on an "AS IS" basis, WITHOUT WARRANTY OF ANY KIND, EITHER
+ * This file contains Original Code and/or Modifications of Original Code
+ * as defined in and that are subject to the Apple Public Source License
+ * Version 2.0 (the 'License'). You may not use this file except in
+ * compliance with the License. Please obtain a copy of the License at
+ * http://www.opensource.apple.com/apsl/ and read it before using this
+ * file.
+ * 
+ * The Original Code and all software distributed under the License are
+ * distributed on an 'AS IS' basis, WITHOUT WARRANTY OF ANY KIND, EITHER
  * EXPRESS OR IMPLIED, AND APPLE HEREBY DISCLAIMS ALL SUCH WARRANTIES,
  * INCLUDING WITHOUT LIMITATION, ANY WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE OR NON-INFRINGEMENT.  Please see the
- * License for the specific language governing rights and limitations
- * under the License.
+ * FITNESS FOR A PARTICULAR PURPOSE, QUIET ENJOYMENT OR NON-INFRINGEMENT.
+ * Please see the License for the specific language governing rights and
+ * limitations under the License.
  * 
  * @APPLE_LICENSE_HEADER_END@
  */
-/*
- * Copyright (c) 1990, 1993
+/*-
+ * Copyright (c) 1990, 1993, 1994
  *	The Regents of the University of California.  All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
@@ -55,6 +58,10 @@
  * SUCH DAMAGE.
  */
 
+#if defined(LIBC_SCCS) && !defined(lint)
+static char sccsid[] = "@(#)bt_conv.c	8.5 (Berkeley) 8/17/94";
+#endif /* LIBC_SCCS and not lint */
+#include <sys/cdefs.h>
 
 #include <sys/param.h>
 
@@ -63,7 +70,7 @@
 #include <db.h>
 #include "btree.h"
 
-static void mswap __P((PAGE *));
+static void mswap(PAGE *);
 
 /*
  * __BT_BPGIN, __BT_BPGOUT --
@@ -86,7 +93,7 @@ __bt_pgin(t, pg, pp)
 	u_char flags;
 	char *p;
 
-	if (!ISSET(((BTREE *)t), B_NEEDSWAP))
+	if (!F_ISSET(((BTREE *)t), B_NEEDSWAP))
 		return;
 	if (pg == P_META) {
 		mswap(pp);
@@ -107,7 +114,7 @@ __bt_pgin(t, pg, pp)
 			M_16_SWAP(h->linp[i]);
 			p = (char *)GETBINTERNAL(h, i);
 			P_32_SWAP(p);
-			p += sizeof(size_t);
+			p += sizeof(u_int32_t);
 			P_32_SWAP(p);
 			p += sizeof(pgno_t);
 			if (*(u_char *)p & P_BIGKEY) {
@@ -122,9 +129,9 @@ __bt_pgin(t, pg, pp)
 			M_16_SWAP(h->linp[i]);
 			p = (char *)GETBLEAF(h, i);
 			P_32_SWAP(p);
-			p += sizeof(size_t);
+			p += sizeof(u_int32_t);
 			P_32_SWAP(p);
-			p += sizeof(size_t);
+			p += sizeof(u_int32_t);
 			flags = *(u_char *)p;
 			if (flags & (P_BIGKEY | P_BIGDATA)) {
 				p += sizeof(u_char);
@@ -134,7 +141,7 @@ __bt_pgin(t, pg, pp)
 					P_32_SWAP(p);
 				}
 				if (flags & P_BIGDATA) {
-					p += sizeof(size_t);
+					p += sizeof(u_int32_t);
 					P_32_SWAP(p);
 					p += sizeof(pgno_t);
 					P_32_SWAP(p);
@@ -154,7 +161,7 @@ __bt_pgout(t, pg, pp)
 	u_char flags;
 	char *p;
 
-	if (!ISSET(((BTREE *)t), B_NEEDSWAP))
+	if (!F_ISSET(((BTREE *)t), B_NEEDSWAP))
 		return;
 	if (pg == P_META) {
 		mswap(pp);
@@ -167,7 +174,7 @@ __bt_pgout(t, pg, pp)
 		for (i = 0; i < top; i++) {
 			p = (char *)GETBINTERNAL(h, i);
 			P_32_SWAP(p);
-			p += sizeof(size_t);
+			p += sizeof(u_int32_t);
 			P_32_SWAP(p);
 			p += sizeof(pgno_t);
 			if (*(u_char *)p & P_BIGKEY) {
@@ -182,9 +189,9 @@ __bt_pgout(t, pg, pp)
 		for (i = 0; i < top; i++) {
 			p = (char *)GETBLEAF(h, i);
 			P_32_SWAP(p);
-			p += sizeof(size_t);
+			p += sizeof(u_int32_t);
 			P_32_SWAP(p);
-			p += sizeof(size_t);
+			p += sizeof(u_int32_t);
 			flags = *(u_char *)p;
 			if (flags & (P_BIGKEY | P_BIGDATA)) {
 				p += sizeof(u_char);
@@ -194,7 +201,7 @@ __bt_pgout(t, pg, pp)
 					P_32_SWAP(p);
 				}
 				if (flags & P_BIGDATA) {
-					p += sizeof(size_t);
+					p += sizeof(u_int32_t);
 					P_32_SWAP(p);
 					p += sizeof(pgno_t);
 					P_32_SWAP(p);
@@ -224,16 +231,16 @@ mswap(pg)
 	char *p;
 
 	p = (char *)pg;
-	P_32_SWAP(p);		/* m_magic */
+	P_32_SWAP(p);		/* magic */
 	p += sizeof(u_int32_t);
-	P_32_SWAP(p);		/* m_version */
+	P_32_SWAP(p);		/* version */
 	p += sizeof(u_int32_t);
-	P_32_SWAP(p);		/* m_psize */
+	P_32_SWAP(p);		/* psize */
 	p += sizeof(u_int32_t);
-	P_32_SWAP(p);		/* m_free */
+	P_32_SWAP(p);		/* free */
 	p += sizeof(u_int32_t);
-	P_32_SWAP(p);		/* m_nrecs */
+	P_32_SWAP(p);		/* nrecs */
 	p += sizeof(u_int32_t);
-	P_32_SWAP(p);		/* m_flags */
+	P_32_SWAP(p);		/* flags */
 	p += sizeof(u_int32_t);
 }

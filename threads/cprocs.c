@@ -3,19 +3,22 @@
  *
  * @APPLE_LICENSE_HEADER_START@
  * 
- * The contents of this file constitute Original Code as defined in and
- * are subject to the Apple Public Source License Version 1.1 (the
- * "License").  You may not use this file except in compliance with the
- * License.  Please obtain a copy of the License at
- * http://www.apple.com/publicsource and read it before using this file.
+ * Copyright (c) 1999-2003 Apple Computer, Inc.  All Rights Reserved.
  * 
- * This Original Code and all software distributed under the License are
- * distributed on an "AS IS" basis, WITHOUT WARRANTY OF ANY KIND, EITHER
+ * This file contains Original Code and/or Modifications of Original Code
+ * as defined in and that are subject to the Apple Public Source License
+ * Version 2.0 (the 'License'). You may not use this file except in
+ * compliance with the License. Please obtain a copy of the License at
+ * http://www.opensource.apple.com/apsl/ and read it before using this
+ * file.
+ * 
+ * The Original Code and all software distributed under the License are
+ * distributed on an 'AS IS' basis, WITHOUT WARRANTY OF ANY KIND, EITHER
  * EXPRESS OR IMPLIED, AND APPLE HEREBY DISCLAIMS ALL SUCH WARRANTIES,
  * INCLUDING WITHOUT LIMITATION, ANY WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE OR NON-INFRINGEMENT.  Please see the
- * License for the specific language governing rights and limitations
- * under the License.
+ * FITNESS FOR A PARTICULAR PURPOSE, QUIET ENJOYMENT OR NON-INFRINGEMENT.
+ * Please see the License for the specific language governing rights and
+ * limitations under the License.
  * 
  * @APPLE_LICENSE_HEADER_END@
  */
@@ -61,8 +64,6 @@ extern void alloc_stack(), _dealloc_stack();
 extern mach_port_t mach_thread_self();
 extern boolean_t swtch_pri();
 
-private int cprocs_started = FALSE;
-
 #ifdef	CTHREADS_DEBUG
 private void
 print_cproc(p)
@@ -97,12 +98,11 @@ print_cproc_queue(name, queue)
 	cthread_queue_map(queue, cproc_t, print_cproc);
 	printf("\n");
 }
-#endif	CTHREADS_DEBUG
-
-private int cproc_lock = 0;		/* unlocked */
-private cproc_t cprocs = NO_CPROC;	/* linked list of cprocs */
+#endif	/* CTHREADS_DEBUG */
 
 #ifdef	CTHREADS_DEBUG
+private cproc_t cprocs = NO_CPROC;	/* linked list of cprocs */
+
 private void
 print_all_cprocs()
 {
@@ -113,7 +113,7 @@ print_all_cprocs()
 		print_cproc(p);
 	printf("\n");
 }
-#endif	CTHREADS_DEBUG
+#endif	/* CTHREADS_DEBUG */
 
 /*
  * Routines for supporting fork() of multi-threaded programs.
