@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2002 Apple Computer, Inc. All rights reserved.
+ * Copyright (c) 1999 Apple Computer, Inc. All rights reserved.
  *
  * @APPLE_LICENSE_HEADER_START@
  * 
@@ -22,15 +22,23 @@
  * 
  * @APPLE_LICENSE_HEADER_END@
  */
+/* Copyright (c) 1992, 1997 NeXT Software, Inc.  All rights reserved.
+ *
+ *	File:	libc/gen/ppc/bcmp.c
+ *
+ *	Byte-compare routine.
+ *
+ * HISTORY
+ *  24-Jan-1997 Umesh Vaishampayan (umeshv@NeXT.com)
+ *	Ported to PPC.
+ */
 
-#define	__APPLE_API_PRIVATE
-#include <machine/cpu_capabilities.h>
-#undef	__APPLE_API_PRIVATE
+#import <string.h>
 
-/* sys_icache_invalidate(char *start, long len) */
-        
-        .text
-        .globl  _sys_icache_invalidate
-        .align	2
-_sys_icache_invalidate:
-        ba	_COMM_PAGE_FLUSH_ICACHE
+#undef	bcmp
+
+int
+bcmp(const void *b1, const void *b2, size_t length)
+{
+    return memcmp(b1, b2, length);
+}

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2003 Apple Computer, Inc. All rights reserved.
+ * Copyright (c) 1999 Apple Computer, Inc. All rights reserved.
  *
  * @APPLE_LICENSE_HEADER_START@
  * 
@@ -22,23 +22,34 @@
  * 
  * @APPLE_LICENSE_HEADER_END@
  */
+/* Copyright (c) 1991, 1997 NeXT Software, Inc.  All rights reserved.
+ * 
+ *	File:	libc/gen/ppc/strncat.c
+ *	Author: Mike DeMoney, NeXT Software, Inc.
+ *
+ *	This file contains machine dependent code for string copy
+ *
+ * HISTORY
+ *  24-Jan-1997 Umesh Vaishampayan (umeshv@NeXT.com)
+ *	Ported to PPC.
+ * 23-Nov-92  Derek B Clegg (dclegg@next.com)
+ *	Ported to m98k.
+ *  4-Jun-91  Mike DeMoney (mike@next.com)
+ *	Created.
+ */
+#import	<string.h>
 
-/* Initialize the "_cpu_capabilities" vector on Intel processors. */
-
-#include <sys/sysctl.h>
-#include <mach/message.h>
-#include <mach/mach_types.h>
-#include <mach/host_info.h>
-
-#define	_APPLE_API_PRIVATE
-#include <machine/cpu_capabilities.h>
-#undef	_APPLE_API_PRIVATE
-
-int _cpu_has_altivec = 0;     // DEPRECATED
-
-__private_extern__ void
-_init_cpu_capabilities( void )
+char *
+strncat(char *s1, const char *s2, size_t n)
 {
-
-	_cpu_capabilities = 0;
+    unsigned len1 = strlen(s1);
+    unsigned len2 = strlen(s2);
+    
+    if (len2 < n) {
+	strcpy(&s1[len1], s2);
+    } else {
+	strncpy(&s1[len1], s2, n);
+	s1[len1 + n] = '\0';
+    }
+    return s1;
 }

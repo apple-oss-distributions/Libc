@@ -25,6 +25,7 @@
 .text
 .globl _strcmp
 _strcmp:
+#if defined(__i386__)
         movl    0x04(%esp),%eax
         movl    0x08(%esp),%edx
         jmp     L2                      /* Jump into the loop! */
@@ -91,3 +92,17 @@ L3:     movzbl  (%eax),%eax             /* unsigned comparison */
         movzbl  (%edx),%edx
         subl    %edx,%eax
         ret
+#elif defined(__ppc__)
+	mr	r5,r3
+1:	lbz	r3,0(r5)
+	addi	r5,r5,1
+	cmpwi	cr1,r3,0
+	lbz	r0,0(r4)
+	addi	r4,r4,1
+	subf.	r3,r0,r3
+	beqlr+	cr1
+	beq-	1b
+	blr
+#else
+#error strcmp is not defined for this architecture
+#endif

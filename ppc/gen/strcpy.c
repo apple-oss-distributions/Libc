@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2003 Apple Computer, Inc. All rights reserved.
+ * Copyright (c) 1999 Apple Computer, Inc. All rights reserved.
  *
  * @APPLE_LICENSE_HEADER_START@
  * 
@@ -22,44 +22,34 @@
  * 
  * @APPLE_LICENSE_HEADER_END@
  */
+/* Copyright (c) 1992, 1997 NeXT Software, Inc.  All rights reserved.
+ * 
+ *	File:	libc/gen/ppc/strcpy.c
+ *
+ *	This file contains machine dependent code for string copy
+ *
+ * HISTORY
+ *  24-Jan-1997 Umesh Vaishampayan (umeshv@NeXT.com)
+ *	Ported to PPC.
+ * 24-Nov-92  Derek B Clegg (dclegg@next.com)
+ *	Created.
+ */
+#import <string.h>
 
-#include <sys/types.h>
-#include <sys/sysctl.h>
-#include <stdbool.h>
+/* XXX This routine should be optimized. */
 
-static int	osi_oid[2] = {-1, 0};
-
-bool
-OSSystemInfo(int selector, unsigned long long *resultp)
+/* ANSI sez:
+ *   The `strcpy' function copies the string pointed to by `s2' (including
+ *   the terminating null character) into the array pointed to by `s1'.
+ *   If copying takes place between objects that overlap, the behavior
+ *   is undefined.
+ *   The `strcpy' function returns the value of `s1'.  [4.11.2.3]
+ */
+char *
+strcpy(char *s1, const char *s2)
 {
-	int oid[3];
-	size_t size;
-
-	/*
-	 * Check cached OID, look it up if we haven't already.
-	 *
-	 * NB. Whilst this isn't strictly thread safe, since the
-	 *     result as written by any thread will be the same
-	 *     there is no actual risk of corruption.
-	 */
-	if (osi_oid[0] == -1) {
-		size = 2;
-		if (sysctlnametomib("hw.systeminfo", &osi_oid, &size) ||
-		    (size != 2))
-			return(false);
-	}
-
-	/* build OID */
-	oid[0] = osi_oid[0];
-	oid[1] = osi_oid[1];
-	oid[2] = selector;
-	
-	/* make the call */
-	size = sizeof(*resultp);
-	if (sysctl(oid, 3, resultp, &size, NULL, 0) ||
-	    (size != sizeof(*resultp)))
-		return(false);
-
-	return(true);
+    char *s = s1;
+    while ((*s++ = *s2++) != 0)
+	;
+    return (s1);
 }
-

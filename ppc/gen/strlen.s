@@ -22,10 +22,6 @@
  * 
  * @APPLE_LICENSE_HEADER_END@
  */
-#define	ASSEMBLER
-#include <mach/ppc/asm.h>
-#undef	ASSEMBLER
-
 ;
 ;
 ; Strlen, optimized for PPC.  The routine we use is 2-3x faster
@@ -44,6 +40,7 @@
 ; with one exception: 0x01 bytes preceeding the first zero are also
 ; mapped to 0x80.
 ;
+#include <mach/ppc/asm.h>
 ;
 ; int	strlen(ptr)
 ;

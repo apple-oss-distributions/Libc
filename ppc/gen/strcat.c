@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2003 Apple Computer, Inc. All rights reserved.
+ * Copyright (c) 1999 Apple Computer, Inc. All rights reserved.
  *
  * @APPLE_LICENSE_HEADER_START@
  * 
@@ -22,20 +22,26 @@
  * 
  * @APPLE_LICENSE_HEADER_END@
  */
+/* Copyright (c) 1991, 1997 NeXT Software, Inc.  All rights reserved.
+ * 
+ *	File:	libc/gen/ppc/strcat.c
+ *	Author: Mike DeMoney, NeXT Software, Inc.
+ *
+ *	This file contains machine dependent code for string copy
+ *
+ * HISTORY
+ *  24-Jan-1997 Umesh Vaishampayan (umeshv@NeXT.com)
+ *	Ported to PPC.
+ * 9-Nov-92  Derek B Clegg (dclegg@next.com)
+ *	Ported to m98k.
+ * 4-Jun-91  Mike DeMoney (mike@next.com)
+ *	Created.
+ */
+#import <string.h>
 
-/* Initialize the "_cpu_capabilities" vector on PowerPC processors. */
-
-#define	__APPLE_API_PRIVATE
-#include <machine/cpu_capabilities.h>
-#undef	__APPLE_API_PRIVATE
-
-int _cpu_has_altivec = 0;		// DEPRECATED: use _cpu_capabilities instead
-int _cpu_capabilities = 0;
-
-__private_extern__ void
-_init_cpu_capabilities( void )
+char *
+strcat(char *s1, const char *s2)
 {
-    _cpu_capabilities = *(int*) _COMM_PAGE_CPU_CAPABILITIES;	// pull out of commpage
-    
-    _cpu_has_altivec = (_cpu_capabilities & kHasAltivec) ? 1 : 0;
+    strcpy(&s1[strlen(s1)], s2);
+    return s1;
 }
