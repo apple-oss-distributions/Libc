@@ -3,8 +3,6 @@
  *
  * @APPLE_LICENSE_HEADER_START@
  * 
- * Copyright (c) 1999-2003 Apple Computer, Inc.  All Rights Reserved.
- * 
  * This file contains Original Code and/or Modifications of Original Code
  * as defined in and that are subject to the Apple Public Source License
  * Version 2.0 (the 'License'). You may not use this file except in
@@ -26,8 +24,9 @@
 
 #import "SYS.h"
 
-LEAF(_ptrace)
-	li	r7,0
-	REG_TO_EXTERN(r7,_errno)
-SYSCALL_NONAME(ptrace, 4)
+MI_ENTRY_POINT(_ptrace)
+	li      r7,0
+    MI_GET_ADDRESS(r8,_errno)
+    stw     r7,0(r8)
+    SYSCALL_NONAME(ptrace, 4)
 	blr

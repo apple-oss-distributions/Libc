@@ -3,8 +3,6 @@
  *
  * @APPLE_LICENSE_HEADER_START@
  * 
- * Copyright (c) 1999-2003 Apple Computer, Inc.  All Rights Reserved.
- * 
  * This file contains Original Code and/or Modifications of Original Code
  * as defined in and that are subject to the Apple Public Source License
  * Version 2.0 (the 'License'). You may not use this file except in
@@ -46,8 +44,8 @@
  * Implementation of cprocs (lightweight processes)
  * and primitive synchronization operations.
  */
-#include <stdlib.h>
 #include "pthread_internals.h"
+#include <stdlib.h>
 #include "cthreads.h"
 #include "cthread_internals.h"
 #include <mach/message.h>
@@ -119,7 +117,8 @@ print_all_cprocs()
  * Routines for supporting fork() of multi-threaded programs.
  */
 
-void _cproc_fork_child()
+void
+_cproc_fork_child()
 /*
  * Called in the child after a fork().  Resets cproc data structures to
  * coincide with the reality that we now have a single cproc and cthread.
@@ -137,15 +136,21 @@ void _cproc_fork_child()
 
 #undef errno
 extern int errno;
-void cthread_set_errno_self(error)
+extern int *__error(void);
+
+void
+cthread_set_errno_self(error)
 	int	error;
 {
-	pthread_t t;
+	int *ep = __error();
+	extern int __unix_conforming;
 
-	t = pthread_self();
-        if (t && (t->sig == _PTHREAD_SIG)) {
-            t->err_no = error;
-        }
+	if ((__unix_conforming) && (error == EINTR) && (__pthread_canceled(0) == 0))
+		pthread_exit(PTHREAD_CANCELED);
+
+        if (ep != &errno)
+            *ep = error;
+
         errno = error;
 }
 

@@ -3,8 +3,6 @@
  *
  * @APPLE_LICENSE_HEADER_START@
  * 
- * Copyright (c) 1999-2003 Apple Computer, Inc.  All Rights Reserved.
- * 
  * This file contains Original Code and/or Modifications of Original Code
  * as defined in and that are subject to the Apple Public Source License
  * Version 2.0 (the 'License'). You may not use this file except in
@@ -55,6 +53,7 @@
  * SUCH DAMAGE.
  */
 
+#include "xlocale_private.h"
 
 #include <sys/param.h>
 #include <sys/file.h>
@@ -116,6 +115,7 @@ initshells()
 	register char **sp, *cp;
 	register FILE *fp;
 	struct stat statb;
+	locale_t loc = __current_locale();
 
 	if (shells != NULL)
 		free(shells);
@@ -148,7 +148,7 @@ initshells()
 		if (*cp == '#' || *cp == '\0')
 			continue;
 		*sp++ = cp;
-		while (!isspace(*cp) && *cp != '#' && *cp != '\0')
+		while (!isspace_l(*cp, loc) && *cp != '#' && *cp != '\0')
 			cp++;
 		*cp++ = '\0';
 	}

@@ -35,16 +35,21 @@ up-to-date.  Many thanks.
 #ifndef _NL_TYPES_H_
 #define _NL_TYPES_H_
 #include <sys/cdefs.h>
+#include <_types.h>
 
 #define	NL_SETD		0
 #define	NL_CAT_LOCALE	1
 
-typedef	int	nl_item;
+#ifndef _NL_ITEM
+typedef	__darwin_nl_item	nl_item;
+#define _NL_ITEM
+#endif
+
 typedef	void	*nl_catd;
 
 __BEGIN_DECLS
-extern nl_catd 	catopen(__const char *, int);
-extern char    *catgets(nl_catd, int, int, __const char *);
+extern nl_catd 	catopen(const char *, int);
+extern char    *catgets(nl_catd, int, int, const char *);
 extern int	catclose(nl_catd);
 __END_DECLS
 

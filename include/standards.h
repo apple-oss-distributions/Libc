@@ -3,8 +3,6 @@
  *
  * @APPLE_LICENSE_HEADER_START@
  * 
- * Copyright (c) 1999-2003 Apple Computer, Inc.  All Rights Reserved.
- * 
  * This file contains Original Code and/or Modifications of Original Code
  * as defined in and that are subject to the Apple Public Source License
  * Version 2.0 (the 'License'). You may not use this file except in
@@ -29,11 +27,11 @@
 #ifndef _STANDARDS_H
 #define _STANDARDS_H
 
-#ifdef _POSIX_SOURCE
+#ifdef _POSIX_C_SOURCE
 #        ifndef __STRICT_ANSI__
 #                define __STRICT_ANSI__
 #        endif
 #        undef __STRICT_BSD__
-#endif /* _POSIX_SOURCE */
+#endif /* _POSIX_C_SOURCE */
 
 #endif /* _STANDARDS_H */

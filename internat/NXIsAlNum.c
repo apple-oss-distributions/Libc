@@ -3,8 +3,6 @@
  *
  * @APPLE_LICENSE_HEADER_START@
  * 
- * Copyright (c) 1999-2003 Apple Computer, Inc.  All Rights Reserved.
- * 
  * This file contains Original Code and/or Modifications of Original Code
  * as defined in and that are subject to the Apple Public Source License
  * Version 2.0 (the 'License'). You may not use this file except in
@@ -34,6 +32,6 @@ int NXIsAlNum(c)
 {
 	FIXSIGNEDCHAR(c);
 	if (c < 256)
-		return ((unsigned int)((_NX_CTypeTable_ + 1)[c] & (_U|_L|_D)));
+		return ((unsigned int)((_NX_CTypeTable_ + 1)[c] & (_CTYPE_U|_CTYPE_L|_CTYPE_D)));
 	return 0;
 }

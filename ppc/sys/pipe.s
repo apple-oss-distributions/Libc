@@ -3,8 +3,6 @@
  *
  * @APPLE_LICENSE_HEADER_START@
  * 
- * Copyright (c) 1999-2003 Apple Computer, Inc.  All Rights Reserved.
- * 
  * This file contains Original Code and/or Modifications of Original Code
  * as defined in and that are subject to the Apple Public Source License
  * Version 2.0 (the 'License'). You may not use this file except in
@@ -26,11 +24,10 @@
 
 #import "SYS.h"
 
-LEAF(_pipe)
-	stw	r3,ARG(1)(r1)		// preserve fildes on stack
+MI_ENTRY_POINT(_pipe)
+    mr      r12,r3              // save fildes across syscall
 	SYSCALL_NONAME(pipe, 0)
-	lwz	r11,ARG(1)(r1)		// restore fildes
-	stw	r3,0(r11)
-	stw	r4,4(r11)
-	li	r3,0
+	stw     r3,0(r12)
+	stw     r4,4(r12)
+	li      r3,0
 	blr

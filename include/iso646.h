@@ -29,6 +29,9 @@
 #ifndef _ISO646_H_
 #define	_ISO646_H_
 
+#ifndef _POSIX_C_SOURCE
+
+#ifndef __cplusplus
 #define	and	&&
 #define	and_eq	&=
 #define	bitand	&
@@ -40,5 +43,8 @@
 #define	or_eq	|=
 #define	xor	^
 #define	xor_eq	^=
+#endif /* ! __cplusplus */
+
+#endif /* ! _POSIX_C_SOURCE */
 
 #endif /* !_ISO646_H_ */

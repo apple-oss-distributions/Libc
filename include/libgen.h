@@ -37,12 +37,6 @@ __BEGIN_DECLS
 
 char	*basename(const char *);
 char	*dirname(const char *);
-#if 0
-char	*regcmp(const char *, ...);
-char	*regex(const char *, const char *, ...);
-
-extern char *__loc1;
-#endif
 
 __END_DECLS
 

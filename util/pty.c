@@ -3,8 +3,6 @@
  *
  * @APPLE_LICENSE_HEADER_START@
  * 
- * Copyright (c) 1999-2003 Apple Computer, Inc.  All Rights Reserved.
- * 
  * This file contains Original Code and/or Modifications of Original Code
  * as defined in and that are subject to the Apple Public Source License
  * Version 2.0 (the 'License'). You may not use this file except in
@@ -96,8 +94,7 @@ int openpty(amaster, aslave, name, termp, winp)
 					return (-1);	/* out of ptys */
 			} else {
 				line[5] = 't';
-				(void) chown(line, getuid(), ttygid);
-				(void) chmod(line, S_IRUSR|S_IWUSR|S_IWGRP);
+				(void) grantpt(master);
 				(void) revoke(line);
 				if ((slave = open(line, O_RDWR, 0)) != -1) {
 					*amaster = master;

@@ -3,8 +3,6 @@
  *
  * @APPLE_LICENSE_HEADER_START@
  * 
- * Copyright (c) 1999-2003 Apple Computer, Inc.  All Rights Reserved.
- * 
  * This file contains Original Code and/or Modifications of Original Code
  * as defined in and that are subject to the Apple Public Source License
  * Version 2.0 (the 'License'). You may not use this file except in
@@ -28,22 +26,31 @@
 #import <NSSystemDirectories.h>
 
 // Names of directories; index into this with NSSearchPathDirectory - 1
-#define numDirs 10
+#define numDirs 14
 static const struct {
     unsigned char invalidDomainMask;	// Domains in which this dir does not appear
     unsigned char alternateDomainMask;	// Domains in which this dir uses the alternate domain path
     const char *dirPath;
 } dirInfo[numDirs] = {
     {0,   0,   "Applications"},
-    {0,   0,   "Applications/GrabBag"},
+    {0,   0,   "Applications/Demos"},
     {0,   0,   "Developer/Applications"},
     {0,   0,   "Applications/Utilities"},
-    {0,   0x8, "Library"},			// Uses alternate form in System domain
+    {0,   0x8, "Library"},                     // Uses alternate form in System domain
     {0,   0,   "Developer"},
-    {0x9, 0,   "Users"},			// Not valid in the System and User domains
-    {0,   0x8, "Library/Documentation"},	// Uses alternate form in System domain
-    {0xe, 0,   "Documents"},			// Only valid in user domain
-    {0x7, 0,   "Library/CoreServices"}  	// Only valid in System domain
+    {0x9, 0,   "Users"},                       // Not valid in the System and User domains
+    {0,   0x8, "Library/Documentation"},       // Uses alternate form in System domain
+    {0xe, 0,   "Documents"},                   // Only valid in user domain
+    {0x7, 0,   "Library/CoreServices"},        // Only valid in System domain
+    {0xe, 0,   "Documents/Autosaved"},         // Only valid in user domain; not public API yet
+    {0xe, 0,   "Desktop"},                     // Only valid in user domain
+    {0,   0,   "Library/Caches"},  			
+    {0,   0,   "Library/Application Support"}
+};
+
+// Unpublicized values for NSSearchPathDirectory
+enum {
+    NSAutosavedDocumentsDirectory = 11
 };
 
 // Ordered list of where to find applications in each domain (the numbers are NSSearchPathDirectory)

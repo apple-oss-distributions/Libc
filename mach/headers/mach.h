@@ -1,9 +1,7 @@
 /*
- * Copyright (c) 1999 Apple Computer, Inc. All rights reserved.
+ * Copyright (c) 1999-2005 Apple Computer, Inc. All rights reserved.
  *
  * @APPLE_LICENSE_HEADER_START@
- * 
- * Copyright (c) 1999-2003 Apple Computer, Inc.  All Rights Reserved.
  * 
  * This file contains Original Code and/or Modifications of Original Code
  * as defined in and that are subject to the Apple Public Source License
@@ -69,7 +67,9 @@
 
 #include <mach/rpc.h>  		/* for compatibility only */
 #include <mach/mig.h>
+
 #include <mach/mig_errors.h>
+#include <mach/mach_error.h>
 
 #include <sys/cdefs.h>
 
@@ -111,12 +111,6 @@ extern mach_msg_return_t	mach_msg_server(boolean_t (*)
 						mach_port_t,
 						mach_msg_options_t);
 
-#ifdef MACH_KERNEL
-extern void			*sbrk(int);
-
-extern int			 brk(void *);
-
-#endif
 /*
  * Prototypes for compatibility
  */

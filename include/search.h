@@ -10,7 +10,12 @@
 #define _SEARCH_H_
 
 #include <sys/cdefs.h>
-#include <sys/types.h>
+#include <_types.h>
+
+#ifndef _SIZE_T
+#define _SIZE_T
+typedef __darwin_size_t	size_t;
+#endif
 
 typedef	struct entry {
 	char	*key;

@@ -3,8 +3,6 @@
  *
  * @APPLE_LICENSE_HEADER_START@
  * 
- * Copyright (c) 1999-2003 Apple Computer, Inc.  All Rights Reserved.
- * 
  * This file contains Original Code and/or Modifications of Original Code
  * as defined in and that are subject to the Apple Public Source License
  * Version 2.0 (the 'License'). You may not use this file except in
@@ -96,8 +94,8 @@ typedef struct _ftsent {
 	char *fts_path;			/* root path */
 	int fts_errno;			/* errno for this node */
 	int fts_symfd;			/* fd for symlink */
-	u_short fts_pathlen;		/* strlen(fts_path) */
-	u_short fts_namelen;		/* strlen(fts_name) */
+	unsigned short fts_pathlen;	/* strlen(fts_path) */
+	unsigned short fts_namelen;	/* strlen(fts_name) */
 
 	ino_t fts_ino;			/* inode */
 	dev_t fts_dev;			/* device */
@@ -121,18 +119,18 @@ typedef struct _ftsent {
 #define	FTS_SL		12		/* symbolic link */
 #define	FTS_SLNONE	13		/* symbolic link without target */
 #define	FTS_W		14		/* whiteout object */
-	u_short fts_info;		/* user flags for FTSENT structure */
+	unsigned short fts_info;	/* user flags for FTSENT structure */
 
 #define	FTS_DONTCHDIR	 0x01		/* don't chdir .. to the parent */
 #define	FTS_SYMFOLLOW	 0x02		/* followed a symlink to get here */
 #define	FTS_ISW		 0x04		/* this is a whiteout object */
-	u_short fts_flags;		/* private flags for FTSENT structure */
+	unsigned short fts_flags;	/* private flags for FTSENT structure */
 
 #define	FTS_AGAIN	 1		/* read node again */
 #define	FTS_FOLLOW	 2		/* follow symbolic link */
 #define	FTS_NOINSTR	 3		/* no instructions */
 #define	FTS_SKIP	 4		/* discard node */
-	u_short fts_instr;		/* fts_set() instructions */
+	unsigned short fts_instr;	/* fts_set() instructions */
 
 	struct stat *fts_statp;		/* stat(2) information */
 	char fts_name[1];		/* file name */

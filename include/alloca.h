@@ -3,8 +3,6 @@
  *
  * @APPLE_LICENSE_HEADER_START@
  * 
- * Copyright (c) 1999-2003 Apple Computer, Inc.  All Rights Reserved.
- * 
  * This file contains Original Code and/or Modifications of Original Code
  * as defined in and that are subject to the Apple Public Source License
  * Version 2.0 (the 'License'). You may not use this file except in
@@ -27,11 +25,11 @@
 #define _ALLOCA_H_
 
 #include <sys/cdefs.h>
-#include <machine/ansi.h>
+#include <_types.h>
 
-#ifndef	_BSD_SIZE_T_DEFINED_
-#define	_BSD_SIZE_T_DEFINED_
-typedef	_BSD_SIZE_T_	size_t;
+#ifndef	_SIZE_T
+#define	_SIZE_T
+typedef	__darwin_size_t	size_t;
 #endif
 
 __BEGIN_DECLS

@@ -3,8 +3,6 @@
  *
  * @APPLE_LICENSE_HEADER_START@
  * 
- * Copyright (c) 1999-2003 Apple Computer, Inc.  All Rights Reserved.
- * 
  * This file contains Original Code and/or Modifications of Original Code
  * as defined in and that are subject to the Apple Public Source License
  * Version 2.0 (the 'License'). You may not use this file except in
@@ -49,7 +47,7 @@
 
 .text
 
-#if defined(__ppc__)
+#if defined(__ppc__) || defined(__ppc64__)
 #import	<architecture/ppc/asm_help.h>
 #import	<architecture/ppc/pseudo_inst.h>
 

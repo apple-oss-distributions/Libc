@@ -3,8 +3,6 @@
  *
  * @APPLE_LICENSE_HEADER_START@
  * 
- * Copyright (c) 1999-2003 Apple Computer, Inc.  All Rights Reserved.
- * 
  * This file contains Original Code and/or Modifications of Original Code
  * as defined in and that are subject to the Apple Public Source License
  * Version 2.0 (the 'License'). You may not use this file except in
@@ -57,7 +55,22 @@
  *	@(#)sgtty.h	8.1 (Berkeley) 6/2/93
  */
 
+#ifndef _SGTTY_H_
+#define _SGTTY_H_
+
+#include <sys/cdefs.h>
+
 #ifndef USE_OLD_TTY
 #define	USE_OLD_TTY
 #endif
 #include <sys/ioctl.h>
+
+__BEGIN_DECLS
+int	gtty(int, struct sgttyb *);
+int	stty(int, struct sgttyb *);
+__END_DECLS
+
+#define	gtty(fd, buf)	ioctl(fd, TIOCGETP, buf)
+#define	stty(fd, buf)	ioctl(fd, TIOCSETP, buf)
+
+#endif /* _SGTTY_H_ */

@@ -30,10 +30,24 @@
 #define	_MONETARY_H_
 
 #include <sys/cdefs.h>
-#include <sys/types.h>
+#include <_types.h>
+
+#ifndef _SIZE_T
+#define _SIZE_T
+typedef	__darwin_size_t		size_t;
+#endif
+
+#ifndef _SSIZE_T
+#define _SSIZE_T
+typedef	__darwin_ssize_t	ssize_t;
+#endif
 
 __BEGIN_DECLS
 ssize_t	strfmon(char *, size_t, const char *, ...);
 __END_DECLS
+
+#ifdef _USE_EXTENDED_LOCALES_
+#include <xlocale/_monetary.h>
+#endif /* _USE_EXTENDED_LOCALES_ */
 
 #endif /* !_MONETARY_H_ */

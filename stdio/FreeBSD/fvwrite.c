@@ -38,7 +38,7 @@
 static char sccsid[] = "@(#)fvwrite.c	8.1 (Berkeley) 6/4/93";
 #endif /* LIBC_SCCS and not lint */
 #include <sys/cdefs.h>
-__FBSDID("$FreeBSD: src/lib/libc/stdio/fvwrite.c,v 1.15 2002/03/22 21:53:04 obrien Exp $");
+__FBSDID("$FreeBSD: src/lib/libc/stdio/fvwrite.c,v 1.17 2004/06/08 05:45:48 das Exp $");
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -67,7 +67,7 @@ __sfvwrite(fp, uio)
 	if ((len = uio->uio_resid) == 0)
 		return (0);
 	/* make sure we can write */
-	if (cantwrite(fp))
+	if (prepwrite(fp) != 0)
 		return (EOF);
 
 #define	MIN(a, b) ((a) < (b) ? (a) : (b))

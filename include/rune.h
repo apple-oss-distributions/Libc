@@ -41,26 +41,33 @@
 
 #include <runetype.h>
 #include <stdio.h>
+#include <AvailabilityMacros.h>
+
+/*--------------------------- DEPRECIATED -------------------------------
+ * This interface is depreciated and will eventually be removed.  The ISO C99
+ * extended multibyte and wide character facilities should be used instead.
+ * See multibyte(3) and related man pages for further details.
+ *--------------------------- DEPRECIATED -------------------------------*/
 
 #define	_PATH_LOCALE	"/usr/share/locale"
 
-#define _INVALID_RUNE   _CurrentRuneLocale->invalid_rune
+#define _INVALID_RUNE   _CurrentRuneLocale->__invalid_rune
 
-#define __sgetrune      _CurrentRuneLocale->sgetrune
-#define __sputrune      _CurrentRuneLocale->sputrune
+#define __sgetrune      _CurrentRuneLocale->__sgetrune
+#define __sputrune      _CurrentRuneLocale->__sputrune
 
 #define sgetrune(s, n, r)       (*__sgetrune)((s), (n), (r))
 #define sputrune(c, s, n, r)    (*__sputrune)((c), (s), (n), (r))
 
 __BEGIN_DECLS
-char	*mbrune(const char *, rune_t);
-char	*mbrrune(const char *, rune_t);
-char	*mbmb(const char *, char *);
-long	 fgetrune(FILE *);
-int	 fputrune(rune_t, FILE *);
-int	 fungetrune(rune_t, FILE *);
-int	 setrunelocale(char *);
-void	 setinvalidrune(rune_t);
+char	*mbrune(const char *, rune_t) AVAILABLE_MAC_OS_X_VERSION_10_0_AND_LATER_BUT_DEPRECATED_IN_MAC_OS_X_VERSION_10_4;
+char	*mbrrune(const char *, rune_t) AVAILABLE_MAC_OS_X_VERSION_10_0_AND_LATER_BUT_DEPRECATED_IN_MAC_OS_X_VERSION_10_4;
+char	*mbmb(const char *, char *) AVAILABLE_MAC_OS_X_VERSION_10_0_AND_LATER_BUT_DEPRECATED_IN_MAC_OS_X_VERSION_10_4;
+long	 fgetrune(FILE *) AVAILABLE_MAC_OS_X_VERSION_10_0_AND_LATER_BUT_DEPRECATED_IN_MAC_OS_X_VERSION_10_4;
+int	 fputrune(rune_t, FILE *) AVAILABLE_MAC_OS_X_VERSION_10_0_AND_LATER_BUT_DEPRECATED_IN_MAC_OS_X_VERSION_10_4;
+int	 fungetrune(rune_t, FILE *) AVAILABLE_MAC_OS_X_VERSION_10_0_AND_LATER_BUT_DEPRECATED_IN_MAC_OS_X_VERSION_10_4;
+int	 setrunelocale(char *) AVAILABLE_MAC_OS_X_VERSION_10_0_AND_LATER_BUT_DEPRECATED_IN_MAC_OS_X_VERSION_10_4;
+void	 setinvalidrune(rune_t) AVAILABLE_MAC_OS_X_VERSION_10_0_AND_LATER_BUT_DEPRECATED_IN_MAC_OS_X_VERSION_10_4;
 __END_DECLS
 
 #endif	/*! _RUNE_H_ */

@@ -3,8 +3,6 @@
  *
  * @APPLE_LICENSE_HEADER_START@
  * 
- * Copyright (c) 1999-2003 Apple Computer, Inc.  All Rights Reserved.
- * 
  * This file contains Original Code and/or Modifications of Original Code
  * as defined in and that are subject to the Apple Public Source License
  * Version 2.0 (the 'License'). You may not use this file except in
@@ -26,6 +24,8 @@
 #include <mach/i386/thread_act.h>
 #elif defined(__ppc__)
 #include <mach/ppc/thread_act.h>
+#elif defined(__ppc64__)
+#include <mach/ppc64/thread_act.h>
 #else
 #error unknown architecture
 #endif 

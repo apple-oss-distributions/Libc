@@ -30,11 +30,11 @@
 #define	_LANGINFO_H_
 
 #include <sys/cdefs.h>
-#include <sys/types.h>
+#include <_types.h>
 
-#ifndef _NL_ITEM_DECLARED
-typedef	int	nl_item;
-#define	_NL_ITEM_DECLARED
+#ifndef _NL_ITEM
+typedef	__darwin_nl_item	nl_item;
+#define	_NL_ITEM
 #endif
 
 #define	CODESET		0	/* codeset name */
@@ -110,12 +110,16 @@ typedef	int	nl_item;
 
 #define	CRNCYSTR	56	/* currency symbol */
 
-#if !defined(_ANSI_SOURCE)
+#if !defined(_ANSI_SOURCE) && !defined(_POSIX_C_SOURCE)
 #define	D_MD_ORDER	57	/* month/day order (local extension) */
 #endif
 
 __BEGIN_DECLS
 char	*nl_langinfo(nl_item);
 __END_DECLS
+
+#ifdef _USE_EXTENDED_LOCALES_
+#include <xlocale/_langinfo.h>
+#endif /* _USE_EXTENDED_LOCALES_ */
 
 #endif /* !_LANGINFO_H_ */

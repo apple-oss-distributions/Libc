@@ -3,8 +3,6 @@
  *
  * @APPLE_LICENSE_HEADER_START@
  * 
- * Copyright (c) 1999-2003 Apple Computer, Inc.  All Rights Reserved.
- * 
  * This file contains Original Code and/or Modifications of Original Code
  * as defined in and that are subject to the Apple Public Source License
  * Version 2.0 (the 'License'). You may not use this file except in
@@ -68,14 +66,14 @@
 #define ANYADDR 	NULL
 
 struct tsp {
-	u_char	tsp_type;
-	u_char	tsp_vers;
-	u_short	tsp_seq;
+	unsigned char	tsp_type;
+	unsigned char	tsp_vers;
+	unsigned short	tsp_seq;
 	union {
 		struct timeval tspu_time;
 		char tspu_hopcnt;
 	} tsp_u;
-	char tsp_name[MAXHOSTNAMELEN];
+	char 		tsp_name[MAXHOSTNAMELEN];
 };
 
 #define	tsp_time	tsp_u.tspu_time

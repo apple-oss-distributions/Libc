@@ -3,8 +3,6 @@
  *
  * @APPLE_LICENSE_HEADER_START@
  * 
- * Copyright (c) 1999-2003 Apple Computer, Inc.  All Rights Reserved.
- * 
  * This file contains Original Code and/or Modifications of Original Code
  * as defined in and that are subject to the Apple Public Source License
  * Version 2.0 (the 'License'). You may not use this file except in
@@ -60,22 +58,22 @@
 
 #include <sys/cdefs.h>
 
-__BEGIN_DECLS
 /*
  *	Kernel-related ports; how a task/thread controls itself
  */
 
-extern	mach_port_t	mach_task_self_;
-
+__BEGIN_DECLS
 extern mach_port_t mach_task_self(void);
 extern mach_port_t mach_host_self(void);
 extern mach_port_t mach_thread_self(void);
+__END_DECLS
 
+extern	mach_port_t	mach_task_self_;
 #define	mach_task_self() mach_task_self_
-
 #define	current_task()	mach_task_self()
 
 #include <mach/mach_traps.h>
+
 /*
  *	Other important ports in the Mach user environment
  */
@@ -102,6 +100,8 @@ extern	mach_port_t	service_port;
  */
 
 extern	vm_size_t	vm_page_size;
+extern	vm_size_t	vm_page_mask;
+extern	int		vm_page_shift;
 
 #define trunc_page(x)	((x) & (~(vm_page_size - 1)))
 #define round_page(x)	trunc_page((x) + (vm_page_size - 1))
@@ -111,7 +111,7 @@ extern	vm_size_t	vm_page_size;
  *	error messages, this can be overridden by a user
  *	application to point to a user-specified output function
  */
-
+__BEGIN_DECLS
 extern int (*vprintf_stderr_func)(const char *format, va_list ap);
 __END_DECLS
 

@@ -3,8 +3,6 @@
  *
  * @APPLE_LICENSE_HEADER_START@
  * 
- * Copyright (c) 1999-2003 Apple Computer, Inc.  All Rights Reserved.
- * 
  * This file contains Original Code and/or Modifications of Original Code
  * as defined in and that are subject to the Apple Public Source License
  * Version 2.0 (the 'License'). You may not use this file except in
@@ -24,5 +22,12 @@
  */
 #include "SYS.h"
 
+#ifdef __LP64__
 SYSCALL(sendmsg, 3)
+#else /* !__LP64__ */
+PSEUDO(sendmsg$UNIX2003, sendmsg, 3)
+	blr
+
+SYSCALL_ERR(sendmsg, 3, cerror_cvt)
+#endif /* __LP64__ */
 

@@ -3,8 +3,6 @@
  *
  * @APPLE_LICENSE_HEADER_START@
  * 
- * Copyright (c) 1999-2003 Apple Computer, Inc.  All Rights Reserved.
- * 
  * This file contains Original Code and/or Modifications of Original Code
  * as defined in and that are subject to the Apple Public Source License
  * Version 2.0 (the 'License'). You may not use this file except in
@@ -36,8 +34,8 @@ __BEGIN_DECLS
 typedef struct _malloc_zone_t {
     /* Only zone implementors should depend on the layout of this structure;
     Regular callers should use the access functions below */
-    unsigned	version;
-    void	*reserved2;
+    void	*reserved1;	/* RESERVED FOR CFAllocator DO NOT USE */
+    void	*reserved2;	/* RESERVED FOR CFAllocator DO NOT USE */
     size_t 	(*size)(struct _malloc_zone_t *zone, const void *ptr); /* returns the size of a block or 0 if not in this zone; must be fast, especially for negative answers */
     void 	*(*malloc)(struct _malloc_zone_t *zone, size_t size);
     void 	*(*calloc)(struct _malloc_zone_t *zone, size_t num_items, size_t size); /* same as malloc, but block returned is set to zero */
@@ -52,7 +50,7 @@ typedef struct _malloc_zone_t {
     void	(*batch_free)(struct _malloc_zone_t *zone, void **to_be_freed, unsigned num_to_be_freed); /* frees all the pointers in to_be_freed; note that to_be_freed may be overwritten during the process */
 
     struct malloc_introspection_t	*introspect;
-    void	*reserved5;
+    unsigned	version;
 } malloc_zone_t;
 
 /*********	Creation and destruction	************/
@@ -179,6 +177,17 @@ extern void malloc_zone_log(malloc_zone_t *zone, void *address);
     If address==0 nothing is logged;
     If address==-1 all activity is logged;
     Else only the activity regarding address is logged */
+
+struct mstats {
+    size_t	bytes_total;
+    size_t	chunks_used;
+    size_t	bytes_used;
+    size_t	chunks_free;
+    size_t	bytes_free;
+};
+
+extern struct mstats mstats(void);
+
 __END_DECLS
 
 #endif /* _MALLOC_MALLOC_H_ */

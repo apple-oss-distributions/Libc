@@ -34,14 +34,13 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #if 0
 #if defined(LIBC_SCCS) && !defined(lint)
 static char sccsid[] = "@(#)vfprintf.c	8.1 (Berkeley) 6/4/93";
 #endif /* LIBC_SCCS and not lint */
-__FBSDID("FreeBSD: src/lib/libc/stdio/vfprintf.c,v 1.58 2003/04/14 11:24:53 das Exp");
 #endif
-__FBSDID("$FreeBSD: src/lib/libc/stdio/vfwprintf.c,v 1.12 2003/04/19 23:53:19 das Exp $");
+#include <sys/cdefs.h>
+__FBSDID("$FreeBSD: src/lib/libc/stdio/vfwprintf.c,v 1.23 2004/08/26 06:25:28 des Exp $");
 
 /*
  * Actual wprintf innards.
@@ -70,9 +69,6 @@ __FBSDID("$FreeBSD: src/lib/libc/stdio/vfwprintf.c,v 1.12 2003/04/19 23:53:19 da
 #include "local.h"
 #include "fvwrite.h"
 
-/* Define FLOATING_POINT to get floating point. */
-#define	FLOATING_POINT
-
 union arg {
 	int	intarg;
 	u_int	uintarg;
@@ -94,7 +90,7 @@ union arg {
 	ptrdiff_t *pptrdiffarg;
 	size_t	*psizearg;
 	intmax_t *pintmaxarg;
-#ifdef FLOATING_POINT
+#ifndef NO_FLOATING_POINT
 	double	doublearg;
 	long double longdoublearg;
 #endif
@@ -114,9 +110,10 @@ enum typeid {
 };
 
 static int	__sbprintf(FILE *, const wchar_t *, va_list);
-static wchar_t	*__ujtoa(uintmax_t, wchar_t *, int, int, const wchar_t *, int,
+static wint_t	__xfputwc(wchar_t, FILE *);
+static wchar_t	*__ujtoa(uintmax_t, wchar_t *, int, int, const char *, int,
 		    char, const char *);
-static wchar_t	*__ultoa(u_long, wchar_t *, int, int, const wchar_t *, int,
+static wchar_t	*__ultoa(u_long, wchar_t *, int, int, const char *, int,
 		    char, const char *);
 static wchar_t	*__mbsconv(char *, int);
 static void	__find_arguments(const wchar_t *, va_list, union arg **);
@@ -156,6 +153,36 @@ __sbprintf(FILE *fp, const wchar_t *fmt, va_list ap)
 }
 
 /*
+ * Like __fputwc, but handles fake string (__SSTR) files properly.
+ * File must already be locked.
+ */
+static wint_t
+__xfputwc(wchar_t wc, FILE *fp)
+{
+	static const mbstate_t initial;
+	mbstate_t mbs;
+	char buf[MB_LEN_MAX];
+	struct __suio uio;
+	struct __siov iov;
+	size_t len;
+
+	if ((fp->_flags & __SSTR) == 0)
+		return (__fputwc(wc, fp));
+
+	mbs = initial;
+	if ((len = wcrtomb(buf, wc, &mbs)) == (size_t)-1) {
+		fp->_flags |= __SERR;
+		return (WEOF);
+	}
+	uio.uio_iov = &iov;
+	uio.uio_resid = len;
+	uio.uio_iovcnt = 1;
+	iov.iov_base = buf;
+	iov.iov_len = len;
+	return (__sfvwrite(fp, &uio) != EOF ? (wint_t)wc : WEOF);
+}
+
+/*
  * Macros for converting digits to letters and vice versa
  */
 #define	to_digit(c)	((c) - '0')
@@ -169,7 +196,7 @@ __sbprintf(FILE *fp, const wchar_t *fmt, va_list ap)
  * use the given digits.
  */
 static wchar_t *
-__ultoa(u_long val, wchar_t *endp, int base, int octzero, const wchar_t *xdigs,
+__ultoa(u_long val, wchar_t *endp, int base, int octzero, const char *xdigs,
 	int needgrp, char thousep, const char *grp)
 {
 	wchar_t *cp = endp;
@@ -247,7 +274,7 @@ __ultoa(u_long val, wchar_t *endp, int base, int octzero, const wchar_t *xdigs,
 /* Identical to __ultoa, but for intmax_t. */
 static wchar_t *
 __ujtoa(uintmax_t val, wchar_t *endp, int base, int octzero,
-	const wchar_t *xdigs, int needgrp, char thousep, const char *grp)
+	const char *xdigs, int needgrp, char thousep, const char *grp)
 {
 	wchar_t *cp = endp;
 	intmax_t sval;
@@ -325,10 +352,11 @@ __ujtoa(uintmax_t val, wchar_t *endp, int base, int octzero,
 static wchar_t *
 __mbsconv(char *mbsarg, int prec)
 {
+	static const mbstate_t initial;
+	mbstate_t mbs;
 	wchar_t *convbuf, *wcp;
 	const char *p;
 	size_t insize, nchars, nconv;
-	mbstate_t mbs;
 
 	if (mbsarg == NULL)
 		return (NULL);
@@ -342,9 +370,9 @@ __mbsconv(char *mbsarg, int prec)
 		 * String is not guaranteed to be NUL-terminated. Find the
 		 * number of characters to print.
 		 */
-		memset(&mbs, 0, sizeof(mbs));
 		p = mbsarg;
 		insize = nchars = 0;
+		mbs = initial;
 		while (nchars != (size_t)prec) {
 			nconv = mbrlen(p, MB_CUR_MAX, &mbs);
 			if (nconv == 0 || nconv == (size_t)-1 ||
@@ -369,7 +397,7 @@ __mbsconv(char *mbsarg, int prec)
 		return (NULL);
 	wcp = convbuf;
 	p = mbsarg;
-	memset(&mbs, 0, sizeof(mbs));
+	mbs = initial;
 	while (insize != 0) {
 		nconv = mbrtowc(wcp, p, insize, &mbs);
 		if (nconv == 0 || nconv == (size_t)-1 || nconv == (size_t)-2)
@@ -402,7 +430,7 @@ vfwprintf(FILE * __restrict fp, const wchar_t * __restrict fmt0, va_list ap)
 	return (ret);
 }
 
-#ifdef FLOATING_POINT
+#ifndef NO_FLOATING_POINT
 
 #define	dtoa		__dtoa
 #define	freedtoa	__freedtoa
@@ -416,7 +444,7 @@ vfwprintf(FILE * __restrict fp, const wchar_t * __restrict fmt0, va_list ap)
 
 static int exponent(wchar_t *, int, wchar_t);
 
-#endif /* FLOATING_POINT */
+#endif /* !NO_FLOATING_POINT */
 
 /*
  * The size of the buffer we use as scratch space for integer
@@ -464,7 +492,7 @@ __vfwprintf(FILE *fp, const wchar_t *fmt0, va_list ap)
 	wchar_t sign;		/* sign prefix (' ', '+', '-', or \0) */
 	char thousands_sep;	/* locale specific thousands separator */
 	const char *grouping;	/* locale specific numeric grouping rules */
-#ifdef FLOATING_POINT
+#ifndef NO_FLOATING_POINT
 	/*
 	 * We can decompose the printed representation of floating
 	 * point numbers into several parts, some of which may be empty:
@@ -503,7 +531,7 @@ __vfwprintf(FILE *fp, const wchar_t *fmt0, va_list ap)
 	int realsz;		/* field size expanded by dprec, sign, etc */
 	int size;		/* size of converted field or string */
 	int prsize;             /* max size of printed field */
-	const wchar_t *xdigs;	/* digits for [xX] conversion */
+	const char *xdigs;	/* digits for [xX] conversion */
 	wchar_t buf[BUF];	/* buffer with space for digits of uintmax_t */
 	wchar_t ox[2];		/* space for 0x hex-prefix */
 	union arg *argtable;	/* args, built due to positional arg */
@@ -523,8 +551,8 @@ __vfwprintf(FILE *fp, const wchar_t *fmt0, va_list ap)
 	static wchar_t zeroes[PADSIZE] =
 	 {'0','0','0','0','0','0','0','0','0','0','0','0','0','0','0','0'};
 
-	static const wchar_t xdigs_lower[16] = L"0123456789abcdef";
-	static const wchar_t xdigs_upper[16] = L"0123456789ABCDEF";
+	static const char xdigs_lower[16] = "0123456789abcdef";
+	static const char xdigs_upper[16] = "0123456789ABCDEF";
 
 	/*
 	 * BEWARE, these `goto error' on error, PRINT uses `n2' and
@@ -532,7 +560,7 @@ __vfwprintf(FILE *fp, const wchar_t *fmt0, va_list ap)
 	 */
 #define	PRINT(ptr, len)	do {			\
 	for (n3 = 0; n3 < (len); n3++)		\
-		__fputwc((ptr)[n3], fp);	\
+		__xfputwc((ptr)[n3], fp);	\
 } while (0)
 #define	PAD(howmany, with)	do {		\
 	if ((n = (howmany)) > 0) {		\
@@ -615,12 +643,12 @@ __vfwprintf(FILE *fp, const wchar_t *fmt0, va_list ap)
 
 	thousands_sep = '\0';
 	grouping = NULL;
-#ifdef FLOATING_POINT
+#ifndef NO_FLOATING_POINT
 	decimal_point = localeconv()->decimal_point;
 #endif
 	convbuf = NULL;
 	/* sorry, fwprintf(read_only_file, L"") returns WEOF, not 0 */
-	if (cantwrite(fp))
+	if (prepwrite(fp) != 0)
 		return (EOF);
 
 	/* optimise fprintf(stderr) (and other unbuffered Unix files) */
@@ -733,7 +761,7 @@ reswitch:	switch (ch) {
 			}
 			width = n;
 			goto reswitch;
-#ifdef FLOATING_POINT
+#ifndef NO_FLOATING_POINT
 		case 'L':
 			flags |= LONGDBL;
 			goto rflag;
@@ -795,8 +823,7 @@ reswitch:	switch (ch) {
 			}
 			base = 10;
 			goto number;
-#ifdef FLOATING_POINT
-#ifdef HEXFLOAT
+#ifndef NO_FLOATING_POINT
 		case 'a':
 		case 'A':
 			if (ch == 'a') {
@@ -808,12 +835,10 @@ reswitch:	switch (ch) {
 				xdigs = xdigs_upper;
 				expchar = 'P';
 			}
-			/*
-			 * XXX We don't actually have a conversion
-			 * XXX routine for this yet.
-			 */
+			if (prec >= 0)
+				prec++;
 			if (flags & LONGDBL) {
-				fparg.ldbl = (double)GETARG(long double);
+				fparg.ldbl = GETARG(long double);
 				dtoaresult =
 				    __hldtoa(fparg.ldbl, xdigs, prec,
 				        &expt, &signflag, &dtoaend);
@@ -823,12 +848,16 @@ reswitch:	switch (ch) {
 				    __hdtoa(fparg.dbl, xdigs, prec,
 				        &expt, &signflag, &dtoaend);
 			}
+			if (prec < 0)
+				prec = dtoaend - dtoaresult;
+			if (expt == INT_MAX)
+				ox[1] = '\0';
 			if (convbuf != NULL)
 				free(convbuf);
+			ndig = dtoaend - dtoaresult;
 			cp = convbuf = __mbsconv(dtoaresult, -1);
 			freedtoa(dtoaresult);
-			goto fp_begin;
-#endif
+			goto fp_common;
 		case 'e':
 		case 'E':
 			expchar = ch;
@@ -867,6 +896,7 @@ fp_begin:
 			ndig = dtoaend - dtoaresult;
 			cp = convbuf = __mbsconv(dtoaresult, -1);
 			freedtoa(dtoaresult);
+fp_common:
 			if (signflag)
 				sign = '-';
 			if (expt == INT_MAX) {	/* inf or nan */
@@ -931,7 +961,7 @@ fp_begin:
 					lead = expt;
 			}
 			break;
-#endif /* FLOATING_POINT */
+#endif /* !NO_FLOATING_POINT */
 		case 'n':
 			/*
 			 * Assignment-like behavior is specified if the
@@ -1109,7 +1139,7 @@ number:			if ((dprec = prec) >= 0)
 		realsz = dprec > size ? dprec : size;
 		if (sign)
 			realsz++;
-		else if (ox[1])
+		if (ox[1])
 			realsz += 2;
 
 		prsize = width > realsz ? width : realsz;
@@ -1123,9 +1153,10 @@ number:			if ((dprec = prec) >= 0)
 			PAD(width - realsz, blanks);
 
 		/* prefix */
-		if (sign) {
+		if (sign)
 			PRINT(&sign, 1);
-		} else if (ox[1]) {	/* ox[1] is either x, X, or \0 */
+
+		if (ox[1]) {	/* ox[1] is either x, X, or \0 */
 			ox[0] = '0';
 			PRINT(ox, 2);
 		}
@@ -1138,7 +1169,7 @@ number:			if ((dprec = prec) >= 0)
 		PAD(dprec - size, zeroes);
 
 		/* the string or number proper */
-#ifdef FLOATING_POINT
+#ifndef NO_FLOATING_POINT
 		if ((flags & FPT) == 0) {
 			PRINT(cp, size);
 		} else {	/* glue together f_p fragments */
@@ -1201,6 +1232,7 @@ number:			if ((dprec = prec) >= 0)
 	}
 done:
 error:
+	va_end(orgap);
 	if (convbuf != NULL)
 		free(convbuf);
 	if (__sferror(fp))
@@ -1237,7 +1269,7 @@ __find_arguments (const wchar_t *fmt0, va_list ap, union arg **argtable)
 	 */
 #define ADDTYPE(type) \
 	((nextarg >= tablesize) ? \
-		__grow_type_table(nextarg, &typetable, &tablesize) : 0, \
+		__grow_type_table(nextarg, &typetable, &tablesize) : (void)0, \
 	(nextarg > tablemax) ? tablemax = nextarg : 0, \
 	typetable[nextarg++] = type)
 
@@ -1279,7 +1311,8 @@ __find_arguments (const wchar_t *fmt0, va_list ap, union arg **argtable)
 	tablesize = STATIC_ARG_TBL_SIZE;
 	tablemax = 0; 
 	nextarg = 1;
-	memset (typetable, T_UNUSED, STATIC_ARG_TBL_SIZE);
+	for (n = 0; n < STATIC_ARG_TBL_SIZE; n++)
+		typetable[n] = T_UNUSED;
 
 	/*
 	 * Scan the format for conversions (`%' character).
@@ -1330,7 +1363,7 @@ reswitch:	switch (ch) {
 			}
 			width = n;
 			goto reswitch;
-#ifdef FLOATING_POINT
+#ifndef NO_FLOATING_POINT
 		case 'L':
 			flags |= LONGDBL;
 			goto rflag;
@@ -1377,11 +1410,9 @@ reswitch:	switch (ch) {
 		case 'i':
 			ADDSARG();
 			break;
-#ifdef FLOATING_POINT
-#ifdef HEXFLOAT
+#ifndef NO_FLOATING_POINT
 		case 'a':
 		case 'A':
-#endif
 		case 'e':
 		case 'E':
 		case 'f':
@@ -1392,7 +1423,7 @@ reswitch:	switch (ch) {
 			else
 				ADDTYPE(T_DOUBLE);
 			break;
-#endif /* FLOATING_POINT */
+#endif /* !NO_FLOATING_POINT */
 		case 'n':
 			if (flags & INTMAXT)
 				ADDTYPE(TP_INTMAXT);
@@ -1512,7 +1543,7 @@ done:
 		    case TP_INTMAXT:
 			(*argtable) [n].pintmaxarg = va_arg (ap, intmax_t *);
 			break;
-#ifdef FLOATING_POINT
+#ifndef NO_FLOATING_POINT
 		    case T_DOUBLE:
 			(*argtable) [n].doublearg = va_arg (ap, double);
 			break;
@@ -1548,26 +1579,28 @@ __grow_type_table (int nextarg, enum typeid **typetable, int *tablesize)
 	enum typeid *const oldtable = *typetable;
 	const int oldsize = *tablesize;
 	enum typeid *newtable;
-	int newsize = oldsize * 2;
+	int n, newsize = oldsize * 2;
 
 	if (newsize < nextarg + 1)
 		newsize = nextarg + 1;
 	if (oldsize == STATIC_ARG_TBL_SIZE) {
-		if ((newtable = malloc(newsize)) == NULL)
+		if ((newtable = malloc(newsize * sizeof(enum typeid))) == NULL)
 			abort();			/* XXX handle better */
-		bcopy(oldtable, newtable, oldsize);
+		bcopy(oldtable, newtable, oldsize * sizeof(enum typeid));
 	} else {
-		if ((newtable = reallocf(oldtable, newsize)) == NULL)
+		newtable = reallocf(oldtable, newsize * sizeof(enum typeid));
+		if (newtable == NULL)
 			abort();			/* XXX handle better */
 	}
-	memset(&newtable[oldsize], T_UNUSED, newsize - oldsize);
+	for (n = oldsize; n < newsize; n++)
+		newtable[n] = T_UNUSED;
 
 	*typetable = newtable;
 	*tablesize = newsize;
 }
 
 
-#ifdef FLOATING_POINT
+#ifndef NO_FLOATING_POINT
 
 static int
 exponent(wchar_t *p0, int exp, wchar_t fmtch)
@@ -1604,4 +1637,4 @@ exponent(wchar_t *p0, int exp, wchar_t fmtch)
 	}
 	return (p - p0);
 }
-#endif /* FLOATING_POINT */
+#endif /* !NO_FLOATING_POINT */
