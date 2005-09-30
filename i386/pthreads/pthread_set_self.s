@@ -21,8 +21,6 @@
  * @APPLE_LICENSE_HEADER_END@
  */
 
-#include <mach/i386/syscall_sw.h>
-
 .text
 .align 2, 0x90
 .globl ___pthread_set_self
@@ -30,7 +28,7 @@ ___pthread_set_self:
 	pushl   4(%esp)
 	pushl   $0
 	movl    $3,%eax
-	MACHDEP_SYSCALL_TRAP
+	lcall   $0x3b,$0
 	addl    $8,%esp     
 	movw    %ax,%gs
 	ret

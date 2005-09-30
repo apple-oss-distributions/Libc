@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1999-2005 Apple Computer, Inc. All rights reserved.
+ * Copyright (c) 1999-2003 Apple Computer, Inc. All rights reserved.
  *
  * @APPLE_LICENSE_HEADER_START@
  * 
@@ -36,11 +36,14 @@ MI_ENTRY_POINT(___commpage_gettimeofday)
  * Note also that the "seconds" field of the timeval is a long, so
  * it's size is mode dependent.
  */
-MI_ENTRY_POINT(___gettimeofday)
+MI_ENTRY_POINT(___ppc_gettimeofday)
     mr      r12,r3              // save ptr to timeval
     SYSCALL_NONAME(gettimeofday,0)
+	mr.     r12,r12             // was timeval ptr null?
+	beq     3f
 	stg     r3,0(r12)           // "stw" in 32-bit mode, "std" in 64-bit mode
 	stw     r4,GPR_BYTES(r12)
 	li      r3,0
+3:
 	blr
 

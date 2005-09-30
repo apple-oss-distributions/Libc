@@ -30,9 +30,6 @@ THIS SOFTWARE.
  * with " at " changed at "@" and " dot " changed to ".").	*/
 
 #include "gdtoaimp.h"
-#ifndef NO_FENV_H
-#include <fenv.h>
-#endif
 
 #ifdef USE_LOCALE
 #include "locale.h"
@@ -115,18 +112,7 @@ strtod
 		switch(s[1]) {
 		  case 'x':
 		  case 'X':
-			{
-#if defined(FE_DOWNWARD) && defined(FE_TONEAREST) && defined(FE_TOWARDZERO) && defined(FE_UPWARD)
-			FPI fpi1 = fpi;
-			switch(fegetround()) {
-			  case FE_TOWARDZERO:	fpi1.rounding = 0; break;
-			  case FE_UPWARD:	fpi1.rounding = 2; break;
-			  case FE_DOWNWARD:	fpi1.rounding = 3;
-			  }
-#else
-#define fpi1 fpi
-#endif
-			switch((i = gethex(&s, &fpi1, &exp, &bb, sign)) & STRTOG_Retmask) {
+			switch((i = gethex(&s, &fpi, &exp, &bb, sign)) & STRTOG_Retmask) {
 			  case STRTOG_NoNumber:
 				s = s00;
 				sign = 0;
@@ -138,7 +124,7 @@ strtod
 					Bfree(bb);
 					}
 				ULtod(((U*)&rv)->L, bits, exp, i);
-			  }}
+			  }
 			goto ret;
 		  }
 		}

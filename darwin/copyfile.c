@@ -835,7 +835,7 @@ typedef struct apple_double_entry
 	u_int32_t   type;     /* entry type: see list, 0 invalid */ 
 	u_int32_t   offset;   /* entry data offset from the beginning of the file. */
 	u_int32_t   length;   /* entry data length in bytes. */
-} __attribute__((packed)) apple_double_entry_t;
+} apple_double_entry_t;
 
 
 typedef struct apple_double_header
@@ -847,7 +847,7 @@ typedef struct apple_double_header
 	apple_double_entry_t   entries[2];  /* 'finfo' & 'rsrc' always exist */
 	u_int8_t    finfo[FINDERINFOSIZE];  /* Must start with Finder Info (32 bytes) */
 	u_int8_t    pad[2];        /* get better alignment inside attr_header */
-} __attribute__((packed)) apple_double_header_t;
+} apple_double_header_t;
 
 
 /* Entries are aligned on 4 byte boundaries */
@@ -858,7 +858,7 @@ typedef struct attr_entry
 	u_int16_t   flags;
 	u_int8_t    namelen;   /* length of name including NULL termination char */ 
 	u_int8_t    name[1];   /* NULL-terminated UTF-8 name (up to 128 bytes max) */
-} __attribute__((packed)) attr_entry_t;
+} attr_entry_t;
 
 
 /* Header + entries must fit into 64K */
@@ -873,7 +873,7 @@ typedef struct attr_header
 	u_int32_t   reserved[3];
 	u_int16_t   flags;
 	u_int16_t   num_attrs;
-} __attribute__((packed)) attr_header_t;
+} attr_header_t;
 
 
 #pragma options align=reset
@@ -1217,23 +1217,23 @@ static int copyfile_pack(copyfile_state_t s)
     /*
      * Fill in the Apple Double Header defaults.
      */
-    filehdr->appledouble.magic              = ADH_MAGIC;
-    filehdr->appledouble.version            = ADH_VERSION;
-    filehdr->appledouble.numEntries         = 2;
-    filehdr->appledouble.entries[0].type    = AD_FINDERINFO;
-    filehdr->appledouble.entries[0].offset  = offsetof(apple_double_header_t, finfo);
-    filehdr->appledouble.entries[0].length  = FINDERINFOSIZE;
-    filehdr->appledouble.entries[1].type    = AD_RESOURCE;
-    filehdr->appledouble.entries[1].offset  = offsetof(apple_double_header_t, pad);
+    filehdr->appledouble.magic              = SWAP32 (ADH_MAGIC);
+    filehdr->appledouble.version            = SWAP32 (ADH_VERSION);
+    filehdr->appledouble.numEntries         = SWAP16 (2);
+    filehdr->appledouble.entries[0].type    = SWAP32 (AD_FINDERINFO);
+    filehdr->appledouble.entries[0].offset  = SWAP32 (offsetof(apple_double_header_t, finfo));
+    filehdr->appledouble.entries[0].length  = SWAP32 (FINDERINFOSIZE);
+    filehdr->appledouble.entries[1].type    = SWAP32 (AD_RESOURCE);
+    filehdr->appledouble.entries[1].offset  = SWAP32 (offsetof(apple_double_header_t, pad));
     filehdr->appledouble.entries[1].length  = 0;
     bcopy(ADH_MACOSX, filehdr->appledouble.filler, sizeof(filehdr->appledouble.filler));
 
     /*
      * Fill in the initial Attribute Header.
      */
-    filehdr->magic       = ATTR_HDR_MAGIC;
-    filehdr->debug_tag   = s->sb.st_ino;
-    filehdr->data_start  = sizeof(attr_header_t);
+    filehdr->magic       = SWAP32 (ATTR_HDR_MAGIC);
+    filehdr->debug_tag   = SWAP32 (s->sb.st_ino);
+    filehdr->data_start  = SWAP32 (sizeof(attr_header_t));
 
     /*
      * Collect the attribute names.
@@ -1380,7 +1380,7 @@ next:
 	filehdr->appledouble.entries[0].length =
 	    filehdr->appledouble.entries[1].offset - filehdr->appledouble.entries[0].offset;
 
-	filehdr->total_size  = filehdr->appledouble.entries[1].offset;
+	filehdr->total_size  = SWAP32 (filehdr->appledouble.entries[1].offset);
     }
 
     /* Copy Resource Fork. */
@@ -1389,9 +1389,6 @@ next:
 
     /* Write the header to disk. */
     datasize = filehdr->appledouble.entries[1].offset;
-
-    swap_adhdr(&filehdr->appledouble);
-    swap_attrhdr(filehdr);
 
     if (pwrite(s->dst_fd, filehdr, datasize, 0) != datasize)
     {

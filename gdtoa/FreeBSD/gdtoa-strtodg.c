@@ -649,8 +649,16 @@ strtodg
 		}
 	bb0 = 0;	/* trailing zero bits in rvb */
 	e2 = rve + rvbits - nbits;
-	if (e2 > fpi->emax + 1)
-		goto huge;
+	if (e2 > fpi->emax) {
+		rvb->wds = 0;
+		irv = STRTOG_Infinite | STRTOG_Overflow | STRTOG_Inexhi;
+#ifndef NO_ERRNO
+		errno = ERANGE;
+#endif
+ infnanexp:
+		*exp = fpi->emax + 1;
+		goto ret;
+		}
 	rve1 = rve + rvbits - nbits;
 	if (e2 < (emin = fpi->emin)) {
 		denorm = 1;
@@ -977,16 +985,6 @@ strtodg
 	Bfree(bs);
 	Bfree(bd0);
 	Bfree(delta);
-	if (rve > fpi->emax) {
- huge:
-		rvb->wds = 0;
-		irv = STRTOG_Infinite | STRTOG_Overflow | STRTOG_Inexhi;
-#ifndef NO_ERRNO
-		errno = ERANGE;
-#endif
- infnanexp:
-		*exp = fpi->emax + 1;
-		}
  ret:
 	if (denorm) {
 		if (sudden_underflow) {

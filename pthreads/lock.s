@@ -95,7 +95,9 @@ END(__spin_unlock)
         TEXT
 	ALIGN
 
+.globl _spin_lock_try
 LEAF(__spin_lock_try, 0)
+_spin_lock_try:
 	movl    $(_COMM_PAGE_SPINLOCK_TRY), %eax
 	jmpl	%eax
 

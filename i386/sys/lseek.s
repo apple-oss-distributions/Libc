@@ -25,5 +25,5 @@
  */
 #include "SYS.h"
 
-UNIX_SYSCALL_INT(lseek, 3)
+UNIX_SYSCALL(lseek, 3)
 	ret

@@ -34,10 +34,6 @@ MISRCS+= errno.c gettimeofday.c sigcatch.c sigsuspend.c \
 CFLAGS-${_src} += -D__APPLE_PR3375657_HACK__
 .endfor
 
-.include "Makefile.obsd_begin"
-OBSDMISRCS= stack_protector.c
-.include "Makefile.obsd_end"
-
 UNIX03SRCS += mmap.c mprotect.c msgctl.c msync.c munmap.c semctl.c shmctl.c
 
 # Add machine dependent asm sources:

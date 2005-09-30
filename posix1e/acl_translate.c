@@ -33,57 +33,10 @@
 #include <pwd.h>
 #include <grp.h>
 
-#include <libkern/OSByteOrder.h>
-
 #include "aclvar.h"
 
-/*
- * NOTE: the copy_int/copy_ext functions are duplicated here, one version of each for
- * each of native and portable endianity.  A more elegant solution might be called for
- * if the functions become much more complicated.
- */
-
-/*
- * acl_t -> external representation, portable endianity
- */
 ssize_t
 acl_copy_ext(void *buf, acl_t acl, ssize_t size)
-{
-	struct kauth_filesec *ext = (struct kauth_filesec *)buf;
-	ssize_t		reqsize;
-	int		i;
-
-	/* validate arguments, compute required size */
-	reqsize = acl_size(acl);
-	if (reqsize < 0)
-		return(-1);
-	if (reqsize > size) {
-		errno = ERANGE;
-		return(-1);
-	}
-		
-	/* export the header */
-	ext->fsec_magic = OSSwapHostToBigInt32(KAUTH_FILESEC_MAGIC);
-	ext->fsec_entrycount = OSSwapHostToBigInt32(acl->a_entries);
-	ext->fsec_flags = OSSwapHostToBigInt32(acl->a_flags);
-	
-	/* copy ACEs */
-	for (i = 0; i < acl->a_entries; i++) {
-		/* ACE contents are almost identical */
-		ext->fsec_ace[i].ace_applicable = acl->a_ace[i].ae_applicable;
-		ext->fsec_ace[i].ace_flags =
-		    OSSwapHostToBigInt32((acl->a_ace[i].ae_tag & KAUTH_ACE_KINDMASK) | (acl->a_ace[i].ae_flags & ~KAUTH_ACE_KINDMASK));
-		ext->fsec_ace[i].ace_rights = OSSwapHostToBigInt32(acl->a_ace[i].ae_perms);
-	}		
-
-	return(reqsize);
-}
-
-/*
- * acl_t -> external representation, native system endianity
- */
-ssize_t
-acl_copy_ext_native(void *buf, acl_t acl, ssize_t size)
 {
 	struct kauth_filesec *ext = (struct kauth_filesec *)buf;
 	ssize_t		reqsize;
@@ -117,45 +70,8 @@ acl_copy_ext_native(void *buf, acl_t acl, ssize_t size)
 	return(reqsize);
 }
 
-/*
- * external representation, portable system endianity -> acl_t
- *
- * Unlike acl_copy_ext, we can't mung the buffer as it doesn't belong to us.
- */
 acl_t
 acl_copy_int(const void *buf)
-{
-	struct kauth_filesec *ext = (struct kauth_filesec *)buf;
-	acl_t		ap;
-	int		i;
-
-	if (ext->fsec_magic != OSSwapHostToBigInt32(KAUTH_FILESEC_MAGIC)) {
-		errno = EINVAL;
-		return(NULL);
-	}
-
-	if ((ap = acl_init(OSSwapBigToHostInt32(ext->fsec_entrycount))) != NULL) {
-		/* copy useful header fields */
-		ap->a_flags = OSSwapBigToHostInt32(ext->fsec_flags);
-		ap->a_entries = OSSwapBigToHostInt32(ext->fsec_entrycount);
-		/* copy ACEs */
-		for (i = 0; i < ap->a_entries; i++) {
-			/* ACE contents are literally identical */
-			ap->a_ace[i].ae_magic = _ACL_ENTRY_MAGIC;
-			ap->a_ace[i].ae_applicable = ext->fsec_ace[i].ace_applicable;
-			ap->a_ace[i].ae_flags = OSSwapBigToHostInt32(ext->fsec_ace[i].ace_flags) & ~KAUTH_ACE_KINDMASK;
-			ap->a_ace[i].ae_tag = OSSwapBigToHostInt32(ext->fsec_ace[i].ace_flags) & KAUTH_ACE_KINDMASK;
-			ap->a_ace[i].ae_perms = OSSwapBigToHostInt32(ext->fsec_ace[i].ace_rights);
-		}
-	}
-	return(ap);
-}
-
-/*
- * external representation, native system endianity -> acl_t
- */
-acl_t
-acl_copy_int_native(const void *buf)
 {
 	struct kauth_filesec *ext = (struct kauth_filesec *)buf;
 	acl_t		ap;
@@ -173,6 +89,9 @@ acl_copy_int_native(const void *buf)
 		/* copy ACEs */
 		for (i = 0; i < ap->a_entries; i++) {
 			/* ACE contents are literally identical */
+/* XXX Consider writing the magic out to the persistent store  
+ * to detect corruption
+ */
 			ap->a_ace[i].ae_magic = _ACL_ENTRY_MAGIC;
 			ap->a_ace[i].ae_applicable = ext->fsec_ace[i].ace_applicable;
 			ap->a_ace[i].ae_flags = ext->fsec_ace[i].ace_flags & ~KAUTH_ACE_KINDMASK;

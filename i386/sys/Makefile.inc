@@ -13,7 +13,6 @@ MDSRCS+=  ATPgetreq.s \
 	__pthread_canceled.s \
 	__pthread_markcancel.s \
 	__semwait_signal.s \
-	__sysenter_trap.s \
 	_setjmp.s \
 	_setlogin.s \
 	_sysctl.s \
@@ -39,7 +38,6 @@ MDSRCS+=  ATPgetreq.s \
 	chflags.s \
 	chmod.s \
 	chown.s \
-	commpage.c \
 	chroot.s \
 	close.s \
 	connect.s \
@@ -94,9 +92,6 @@ MDSRCS+=  ATPgetreq.s \
 	getsockopt.s \
 	getuid.s \
 	getxattr.s  \
-	i386_gettimeofday.s \
-	i386_get_ldt.s \
-	i386_set_ldt.s \
 	ioctl.s \
 	issetugid.s \
 	kevent.s \

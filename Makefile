@@ -26,9 +26,6 @@ CFLAGS += -D__DARWIN_UNIX03=1
 .else
 CFLAGS += -D__DARWIN_UNIX03=0
 .endif
-.if (${MACHINE_ARCH} == i386)
-CFLAGS += -march=prescott -msse3
-.endif
 CFLAGS += -D__LIBC__ -DNOID -I${.CURDIR}/include
 .ifdef ALTLIBCHEADERS
 INCLUDEDIR = ${ALTLIBCHEADERS}

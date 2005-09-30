@@ -25,5 +25,5 @@
  */
 #include "SYS.h"
 
-UNIX_SYSCALL_INT(sigaltstack, 3)
+UNIX_SYSCALL(sigaltstack, 3)
 	ret

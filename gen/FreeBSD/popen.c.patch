@@ -1,5 +1,5 @@
---- popen.c.orig	2003-05-20 15:21:02.000000000 -0700
-+++ popen.c	2005-09-17 16:08:55.000000000 -0700
+--- popen.c.orig	Mon May 24 23:50:41 2004
++++ popen.c	Tue May 25 00:09:39 2004
 @@ -43,6 +43,7 @@
  #include "namespace.h"
  #include <sys/param.h>
@@ -48,15 +48,6 @@
 -		return (NULL);
  
  	if ((cur = malloc(sizeof(struct pid))) == NULL) {
- 		(void)_close(pdes[0]);
-@@ -104,7 +106,7 @@
- 	argv[3] = NULL;
- 
- 	THREAD_LOCK();
--	switch (pid = vfork()) {
-+	switch (pid = fork()) {
- 	case -1:			/* Error. */
- 		THREAD_UNLOCK();
  		(void)_close(pdes[0]);
 @@ -138,7 +140,7 @@
  			(void)_close(pdes[1]);

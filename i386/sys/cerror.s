@@ -33,13 +33,9 @@ LABEL(cerror_cvt)
 	movl	$45, %eax	/* Yes; make ENOTSUP for compatibility */
 LABEL(cerror)
 	REG_TO_EXTERN(%eax, _errno)
-	mov		%esp,%edx
-	andl	$0xfffffff0,%esp
-	subl	$16,%esp
-	movl	%edx,4(%esp)
-	movl	%eax,(%esp)
+	pushl	%eax
 	CALL_EXTERN(_cthread_set_errno_self)
-	movl	4(%esp),%esp
+	addl	$4,%esp
 	movl	$-1,%eax
 	movl	$-1,%edx /* in case a 64-bit value is returned */
 	ret
