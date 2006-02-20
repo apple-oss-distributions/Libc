@@ -33,10 +33,57 @@
 #include <pwd.h>
 #include <grp.h>
 
+#include <libkern/OSByteOrder.h>
+
 #include "aclvar.h"
 
+/*
+ * NOTE: the copy_int/copy_ext functions are duplicated here, one version of each for
+ * each of native and portable endianity.  A more elegant solution might be called for
+ * if the functions become much more complicated.
+ */
+
+/*
+ * acl_t -> external representation, portable endianity
+ */
 ssize_t
 acl_copy_ext(void *buf, acl_t acl, ssize_t size)
+{
+	struct kauth_filesec *ext = (struct kauth_filesec *)buf;
+	ssize_t		reqsize;
+	int		i;
+
+	/* validate arguments, compute required size */
+	reqsize = acl_size(acl);
+	if (reqsize < 0)
+		return(-1);
+	if (reqsize > size) {
+		errno = ERANGE;
+		return(-1);
+	}
+		
+	/* export the header */
+	ext->fsec_magic = OSSwapHostToBigInt32(KAUTH_FILESEC_MAGIC);
+	ext->fsec_entrycount = OSSwapHostToBigInt32(acl->a_entries);
+	ext->fsec_flags = OSSwapHostToBigInt32(acl->a_flags);
+	
+	/* copy ACEs */
+	for (i = 0; i < acl->a_entries; i++) {
+		/* ACE contents are almost identical */
+		ext->fsec_ace[i].ace_applicable = acl->a_ace[i].ae_applicable;
+		ext->fsec_ace[i].ace_flags =
+		    OSSwapHostToBigInt32((acl->a_ace[i].ae_tag & KAUTH_ACE_KINDMASK) | (acl->a_ace[i].ae_flags & ~KAUTH_ACE_KINDMASK));
+		ext->fsec_ace[i].ace_rights = OSSwapHostToBigInt32(acl->a_ace[i].ae_perms);
+	}		
+
+	return(reqsize);
+}
+
+/*
+ * acl_t -> external representation, native system endianity
+ */
+ssize_t
+acl_copy_ext_native(void *buf, acl_t acl, ssize_t size)
 {
 	struct kauth_filesec *ext = (struct kauth_filesec *)buf;
 	ssize_t		reqsize;
@@ -70,8 +117,45 @@ acl_copy_ext(void *buf, acl_t acl, ssize_t size)
 	return(reqsize);
 }
 
+/*
+ * external representation, portable system endianity -> acl_t
+ *
+ * Unlike acl_copy_ext, we can't mung the buffer as it doesn't belong to us.
+ */
 acl_t
 acl_copy_int(const void *buf)
+{
+	struct kauth_filesec *ext = (struct kauth_filesec *)buf;
+	acl_t		ap;
+	int		i;
+
+	if (ext->fsec_magic != OSSwapHostToBigInt32(KAUTH_FILESEC_MAGIC)) {
+		errno = EINVAL;
+		return(NULL);
+	}
+
+	if ((ap = acl_init(OSSwapBigToHostInt32(ext->fsec_entrycount))) != NULL) {
+		/* copy useful header fields */
+		ap->a_flags = OSSwapBigToHostInt32(ext->fsec_flags);
+		ap->a_entries = OSSwapBigToHostInt32(ext->fsec_entrycount);
+		/* copy ACEs */
+		for (i = 0; i < ap->a_entries; i++) {
+			/* ACE contents are literally identical */
+			ap->a_ace[i].ae_magic = _ACL_ENTRY_MAGIC;
+			ap->a_ace[i].ae_applicable = ext->fsec_ace[i].ace_applicable;
+			ap->a_ace[i].ae_flags = OSSwapBigToHostInt32(ext->fsec_ace[i].ace_flags) & ~KAUTH_ACE_KINDMASK;
+			ap->a_ace[i].ae_tag = OSSwapBigToHostInt32(ext->fsec_ace[i].ace_flags) & KAUTH_ACE_KINDMASK;
+			ap->a_ace[i].ae_perms = OSSwapBigToHostInt32(ext->fsec_ace[i].ace_rights);
+		}
+	}
+	return(ap);
+}
+
+/*
+ * external representation, native system endianity -> acl_t
+ */
+acl_t
+acl_copy_int_native(const void *buf)
 {
 	struct kauth_filesec *ext = (struct kauth_filesec *)buf;
 	acl_t		ap;
@@ -89,9 +173,6 @@ acl_copy_int(const void *buf)
 		/* copy ACEs */
 		for (i = 0; i < ap->a_entries; i++) {
 			/* ACE contents are literally identical */
-/* XXX Consider writing the magic out to the persistent store  
- * to detect corruption
- */
 			ap->a_ace[i].ae_magic = _ACL_ENTRY_MAGIC;
 			ap->a_ace[i].ae_applicable = ext->fsec_ace[i].ace_applicable;
 			ap->a_ace[i].ae_flags = ext->fsec_ace[i].ace_flags & ~KAUTH_ACE_KINDMASK;
@@ -136,6 +217,7 @@ static struct {
 	char		*name;
 	int		type;
 } acl_flags[] = {
+	{ACL_ENTRY_INHERITED,		"inherited",		ACL_TYPE_FILE | ACL_TYPE_DIR},
 	{ACL_FLAG_DEFER_INHERIT,	"defer_inherit",	ACL_TYPE_ACL},
 	{ACL_ENTRY_FILE_INHERIT,	"file_inherit",		ACL_TYPE_DIR},
 	{ACL_ENTRY_DIRECTORY_INHERIT,	"directory_inherit",	ACL_TYPE_DIR},
@@ -161,16 +243,16 @@ raosnprintf(char **buf, size_t *size, ssize_t *offset, char *fmt, ...)
 	    va_start(ap, fmt);
 	    ret = vsnprintf(*buf + *offset, *size - *offset, fmt, ap);
 	    va_end(ap);
-	    if (ret < *size)
+	    if (ret < (*size - *offset))
 	    {
 		*offset += ret;
 		return ret;
 	    }
 	}
-	*buf = realloc(*buf, (*size *= 2));
+	*buf = reallocf(*buf, (*size *= 2));
     } while (*buf);
 
-    //warn("realloc failure");
+    //warn("reallocf failure");
     return 0;
 }
 
@@ -198,7 +280,7 @@ uuid_to_name(uuid_t *uu, uid_t *id, int *isgid)
 errout:		;    //warn("Unable to translate qualifier on ACL\n");
 	}
     }
-    return "";
+    return strdup("");
 }
 
 acl_t
@@ -306,7 +388,9 @@ acl_from_text(const char *buf_p)
 	    need_tag = 0;
 	}
 	/* name */
-	if ((field = strtok_r(NULL, ":", &last_field)) != NULL && need_tag)
+	if (*last_field == ':')  // empty username field
+	    last_field++;
+	else if ((field = strtok_r(NULL, ":", &last_field)) != NULL && need_tag)
 	{
 	    switch(ug_tag)
 	    {
@@ -330,7 +414,9 @@ acl_from_text(const char *buf_p)
 	    need_tag = 0;
 	}
 	/* uid */
-	if ((field = strtok_r(NULL, ":", &last_field)) != NULL && need_tag)
+	if (*last_field == ':') // empty uid field
+	    last_field++;
+	else if ((field = strtok_r(NULL, ":", &last_field)) != NULL && need_tag)
 	{
 	    uid_t id;
 	    error = 0;
@@ -404,29 +490,25 @@ acl_from_text(const char *buf_p)
 	    }
 	}
 
-	if((field = strtok_r(NULL, ":", &last_field)) == NULL)
-	{
-	    error = EINVAL;
-	    goto exit;
-	}
-
-	for (sub = strtok_r(field, ",", &last_sub); sub;
-	     sub = strtok_r(NULL, ",", &last_sub))
-	{
-	    for (i = 0; acl_perms[i].name != NULL; i++)
+	if((field = strtok_r(NULL, ":", &last_field)) != NULL) {
+	    for (sub = strtok_r(field, ",", &last_sub); sub;
+		 sub = strtok_r(NULL, ",", &last_sub))
 	    {
-		if (acl_perms[i].type & (ACL_TYPE_FILE | ACL_TYPE_DIR)
-			&& !strcmp(acl_perms[i].name, sub))
+		for (i = 0; acl_perms[i].name != NULL; i++)
 		{
-		    acl_add_perm(perms, acl_perms[i].perm);
-		    break;
+		    if (acl_perms[i].type & (ACL_TYPE_FILE | ACL_TYPE_DIR)
+			    && !strcmp(acl_perms[i].name, sub))
+		    {
+			acl_add_perm(perms, acl_perms[i].perm);
+			break;
+		    }
 		}
-	    }
-	    if (acl_perms[i].name == NULL)
-	    {
-		/* couldn't find perm */
-		error = EINVAL;
-		goto exit;
+		if (acl_perms[i].name == NULL)
+		{
+		    /* couldn't find perm */
+		    error = EINVAL;
+		    goto exit;
+		}
 	    }
 	}
 	acl_set_tag_type(acl_entry, tag);
@@ -455,16 +537,21 @@ acl_to_text(acl_t acl, ssize_t *len_p)
 	char *str, uu_str[256];
 	int i, first;
 	int isgid;
-
 	size_t bufsize = 1024;
-	char *buf = malloc(bufsize);
+	char *buf;
 
+	if (!_ACL_VALID_ACL(acl)) {
+		errno = EINVAL;
+		return NULL;
+	}
+
+	buf = malloc(bufsize);
 	if (len_p == NULL)
 	    len_p = alloca(sizeof(ssize_t));
 
 	*len_p = 0;
 
-	if(!raosnprintf(&buf, &bufsize, len_p, "!#acl %d", 1))
+	if (!raosnprintf(&buf, &bufsize, len_p, "!#acl %d", 1))
 	    return NULL;
 
 	if (acl_get_flagset_np(acl, &flags) == 0)
@@ -530,7 +617,7 @@ acl_to_text(acl_t acl, ssize_t *len_p)
 	    }
 	}
 	buf[(*len_p)++] = '\n';
-	buf[(*len_p)++] = 0;
+	buf[(*len_p)] = 0;
 	return buf;
 }
 

@@ -25,7 +25,7 @@
  */
 #include "SYS.h"
 
-UNIX_SYSCALL(pipe, 0)
+UNIX_SYSCALL_INT(pipe, 0)
 	movl	4(%esp),%ecx
 	movl	%eax,(%ecx)
 	movl	%edx,4(%ecx)

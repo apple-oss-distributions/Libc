@@ -57,9 +57,17 @@ static inline void copy_pages(const void *source, void *dest, unsigned bytes) {
 
 /***************	Recording stack		***********/
 
-static void *first_frame_address(void) {
+// The three functions below are marked as noinline to ensure consistent inlining across
+// all versions of GCC and all compiler flags.  The malloc stack logging code expects
+// these functions to not be inlined.
+// For details, see <rdar://problem/4199620>.
+//
+// The performance cost of not inlining these functions is negligible, and they're only
+// called when MallocStackLogging is set anyway, so they won't affect normal usage.
+
+static __attribute__((noinline)) void *first_frame_address(void) {
 #if defined(__i386__)
-    return __builtin_frame_address(1);
+    return __builtin_frame_address(0);
 #elif defined(__ppc__) || defined(__ppc64__)
     void *addr;
 #warning __builtin_frame_address IS BROKEN IN BEAKER: RADAR #2340421
@@ -71,7 +79,7 @@ static void *first_frame_address(void) {
 #endif
 }
 
-static void *next_frame_address(void *addr) {
+static __attribute__((noinline)) void *next_frame_address(void *addr) {
     void *ret;
 #if defined(__MACH__) && defined(__i386__)
     __asm__ volatile("movl (%1),%0" : "=r" (ret) : "r" (addr));
@@ -100,7 +108,7 @@ static void *next_frame_address(void *addr) {
 #error  ********** Unimplemented architecture
 #endif
 
-void thread_stack_pcs(vm_address_t *buffer, unsigned max, unsigned *nb) {
+__attribute__((noinline)) void thread_stack_pcs(vm_address_t *buffer, unsigned max, unsigned *nb) {
     void *addr;
     addr = first_frame_address();
     *nb = 0;

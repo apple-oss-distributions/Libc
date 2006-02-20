@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1999 Apple Computer, Inc. All rights reserved.
+ * Copyright (c) 2005 Apple Computer, Inc. All rights reserved.
  *
  * @APPLE_LICENSE_HEADER_START@
  * 
@@ -20,10 +20,10 @@
  * 
  * @APPLE_LICENSE_HEADER_END@
  */
-/*
- * Copyright (c) 1995 NeXT Computer, Inc. All Rights Reserved
- */
-#include "SYS.h"
 
-UNIX_SYSCALL_INT(sigaltstack, 3)
-	ret
+/*
+ * bcmp() is implemented in memcmp.s, as it is equivalent to memcmp() in OSX.
+ * (The two symbols, bcmp and memcmp, have the same value.)
+ * This empty file is here to prevent the Free BSD machine independent version
+ * from building.
+ */

@@ -25,7 +25,8 @@
  */
 #include "SYS.h"
 
-LEAF(_fork, 0) 
+LEAF(_fork, 0)
+	subl  $28, %esp   // Align the stack, with 16 bytes of extra padding that we'll need
 	CALL_EXTERN(__cthread_fork_prepare)
 #if defined(__DYNAMIC__)
 // Just like __cthread_fork_prepare we need to prevent threads on the child's
@@ -36,22 +37,20 @@ LEAF(_fork, 0)
 LC1:
 	.ascii "__dyld_fork_prepare\0"
 .text
-	subl	$4,%esp		// allocate space for the address parameter
-	leal	0(%esp),%eax	// get the address of the allocated space
-	pushl	%eax		// push the address of the allocated space
+	// Put a pointer to 8(%esp) in 4(%esp) for _dyld_func_lookup to fill in.
+	leal	0x8(%esp),%eax	// get the address where we're going to store the pointer
+	movl	%eax, 0x4(%esp)	// copy the address of the pointer
 	call	1f
 1:	popl	%eax
 	leal	LC1-1b(%eax),%eax
-	pushl 	%eax		// push the name of the function to look up
+	movl 	%eax, 0x0(%esp)	// copy the name of the function to look up
 	call 	__dyld_func_lookup
-	addl	$8,%esp		// remove parameters to __dyld_func_lookup
-	movl	0(%esp),%eax	// move the value returned in address parameter
-	addl	$4,%esp		// deallocate the space for the address param
+	movl	0x8(%esp),%eax	// move the value returned in address parameter
 	call	*%eax		// call __dyld_fork_prepare indirectly
 #endif
 
 	movl 	$ SYS_fork,%eax; 	// code for fork -> eax
-	UNIX_SYSCALL_TRAP; 		// do the system call
+	UNIX_SYSCALL_TRAP		// do the system call
 	jnc	L1			// jump if CF==0
 
 #if defined(__DYNAMIC__)
@@ -63,24 +62,22 @@ LC1:
 LC2:
 	.ascii "__dyld_fork_parent\0"
 .text
-	pushl	%eax		// save the return value (errno)
-	subl	$4,%esp		// allocate space for the address parameter
-	leal	0(%esp),%eax	// get the address of the allocated space
-	pushl	%eax		// push the address of the allocated space
+	movl	%eax, 0xc(%esp)		// save the return value (errno)
+	leal	0x8(%esp),%eax		// get the address where we're going to store the pointer
+	movl	%eax, 0x4(%esp)		// copy the address of the pointer
 	call	1f
 1:	popl	%eax
 	leal	LC2-1b(%eax),%eax
-	pushl 	%eax		// push the name of the function to look up
+	movl 	%eax, 0x0(%esp)		// copy the name of the function to look up
 	call 	__dyld_func_lookup
-	addl	$8,%esp		// remove parameters to __dyld_func_lookup
-	movl	0(%esp),%eax	// move the value returned in address parameter
-	addl	$4,%esp		// deallocate the space for the address param
+	movl	0x8(%esp),%eax		// move the value returned in address parameter
 	call	*%eax		// call __dyld_fork_parent indirectly
-	popl	%eax		// restore the return value (errno)
+	movl	0xc(%esp), %eax		// restore the return value (errno)
 #endif
 	CALL_EXTERN(cerror)
 	CALL_EXTERN(__cthread_fork_parent)
 	movl	$-1,%eax
+	addl	$28, %esp   // restore the stack
 	ret
 	
 L1:
@@ -91,7 +88,7 @@ L1:
 #if defined(__DYNAMIC__)
 // Here on the child side of the fork we need to tell the dynamic linker that
 // we have forked.  To do this we call __dyld_fork_child in the dyanmic
-// linker.  But since we can't dynamicly bind anything until this is done we
+// linker.  But since we can't dynamically bind anything until this is done we
 // do this by using the private extern __dyld_func_lookup() function to get the
 // address of __dyld_fork_child (the 'C' code equivlent):
 //
@@ -103,17 +100,14 @@ LC0:
 	.ascii "__dyld_fork_child\0"
 
 .text
-	subl	$4,%esp		// allocate space for the address parameter
-	leal	0(%esp),%eax	// get the address of the allocated space
-	pushl	%eax		// push the address of the allocated space
+	leal	0x8(%esp),%eax		// get the address where we're going to store the pointer
+	movl	%eax, 0x4(%esp)		// copy the address of the pointer
 	call	1f
 1:	popl	%eax
 	leal	LC0-1b(%eax),%eax
-	pushl 	%eax		// push the name of the function to look up
+	movl 	%eax, 0x0(%esp)		// copy the name of the function to look up
 	call 	__dyld_func_lookup
-	addl	$8,%esp		// remove parameters to __dyld_func_lookup
-	movl	0(%esp),%eax	// move the value returned in address parameter
-	addl	$4,%esp		// deallocate the space for the address param
+	movl	0x8(%esp),%eax		// move the value returned in address parameter
 	call	*%eax		// call __dyld_fork_child indirectly
 #endif
 	xorl	%eax, %eax
@@ -125,42 +119,38 @@ LC10:
 	.ascii "__dyld_fork_child_final\0"
 
 .text
-	subl	$4,%esp		// allocate space for the address parameter
-	leal	0(%esp),%eax	// get the address of the allocated space
-	pushl	%eax		// push the address of the allocated space
+	leal	0x8(%esp),%eax		// get the address where we're going to store the pointer
+	movl	%eax, 0x4(%esp)		// copy the address of the pointer
 	call	1f
 1:	popl	%eax
 	leal	LC10-1b(%eax),%eax
-	pushl 	%eax		// push the name of the function to look up
+	movl 	%eax, 0x0(%esp)		// copy the name of the function to look up
 	call 	__dyld_func_lookup
-	addl	$8,%esp		// remove parameters to __dyld_func_lookup
-	movl	0(%esp),%eax	// move the value returned in address parameter
-	addl	$4,%esp		// deallocate the space for the address param
+	movl	0x8(%esp),%eax		// move the value returned in address parameter
 	call	*%eax		// call __dyld_fork_child_final indirectly
 #endif
 	xorl	%eax,%eax	// zero eax
+	addl	$28, %esp   // restore the stack
 	ret
 
 	//parent here...
 L2:
-	push	%eax		// save pid
+	movl	%eax, 0xc(%esp)		// save pid
 #if	defined(__DYNAMIC__)
 // __dyld_fork_parent() is called by the parent process after a fork syscall.
 // This releases the dyld lock acquired by __dyld_fork_prepare().
-	subl	$4,%esp		// allocate space for the address parameter
-	leal	0(%esp),%eax	// get the address of the allocated space
-	pushl	%eax		// push the address of the allocated space
+	leal	0x8(%esp),%eax		// get the address where we're going to store the pointer
+	movl	%eax, 0x4(%esp)		// copy the address of the allocated space
 	call	1f
 1:	popl	%eax
 	leal	LC2-1b(%eax),%eax
-	pushl 	%eax		// push the name of the function to look up
+	movl 	%eax, 0x0(%esp)		// copy the name of the function to look up
 	call 	__dyld_func_lookup
-	addl	$8,%esp		// remove parameters to __dyld_func_lookup
-	movl	0(%esp),%eax	// move the value returned in address parameter
-	addl	$4,%esp		// deallocate the space for the address param
+	movl	0x8(%esp),%eax		// move the value returned in address parameter
 	call	*%eax		// call __dyld_fork_parent indirectly
 #endif
 	CALL_EXTERN_AGAIN(__cthread_fork_parent)
-	pop	%eax
+	movl	0xc(%esp), %eax		// return pid
+	addl	$28, %esp   // restore the stack
 	ret		
 

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1999 Apple Computer, Inc. All rights reserved.
+ * Copyright (c) 1999-2005 Apple Computer, Inc. All rights reserved.
  *
  * @APPLE_LICENSE_HEADER_START@
  * 
@@ -40,10 +40,13 @@
 #include <architecture/i386/asm_help.h>
 #include <mach/i386/syscall_sw.h>
 
+/*
+ * We have two entry points. int's is used for syscalls which need to preserve
+ * %ecx across the call, or return a 64-bit value in %eax:%edx. sysenter is used
+ * for the majority of syscalls which just return a value in %eax.
+ */
 
-#define UNIX_SYSCALL_TRAP	lcall	$0x2b, $0
-#define MACHDEP_SYSCALL_TRAP	lcall	$0x7, $0
-
+#define UNIX_SYSCALL_SYSENTER	SYSENTER_PAD call __sysenter_trap
 
 /*
  * This is the same as UNIX_SYSCALL, but it can call an alternate error
@@ -53,12 +56,21 @@
 	.globl	error_ret				;\
 LEAF(_##name, 0)					;\
 	movl	$ SYS_##name, %eax			;\
-	UNIX_SYSCALL_TRAP				;\
+	UNIX_SYSCALL_SYSENTER				;\
 	jnb	2f					;\
 	BRANCH_EXTERN(error_ret)  			;\
 2:
 
 #define UNIX_SYSCALL(name, nargs)			\
+	.globl	cerror					;\
+LEAF(_##name, 0)					;\
+	movl	$ SYS_##name, %eax			;\
+	UNIX_SYSCALL_SYSENTER				;\
+	jnb	2f					;\
+	BRANCH_EXTERN(cerror)  				;\
+2:
+
+#define UNIX_SYSCALL_INT(name, nargs)			\
 	.globl	cerror					;\
 LEAF(_##name, 0)					;\
 	movl	$ SYS_##name, %eax			;\
@@ -68,6 +80,14 @@ LEAF(_##name, 0)					;\
 2:
 
 #define UNIX_SYSCALL_NONAME(name, nargs)		\
+	.globl	cerror					;\
+	movl	$ SYS_##name, %eax			;\
+	UNIX_SYSCALL_SYSENTER				;\
+	jnb	2f					;\
+	BRANCH_EXTERN(cerror)  				;\
+2:
+
+#define UNIX_SYSCALL_INT_NONAME(name, nargs)		\
 	.globl	cerror					;\
 	movl	$ SYS_##name, %eax			;\
 	UNIX_SYSCALL_TRAP				;\

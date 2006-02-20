@@ -61,6 +61,7 @@
 #define JB_FS           64
 #define JB_GS           68
 
+#define SAVE_SEG_REGS	1
 
 LEAF(__setjmp, 0)
         movl    4(%esp), %ecx           // jmp_buf (struct sigcontext *)
@@ -122,7 +123,7 @@ LEAF(__longjmp, 0)
 #if SAVE_SEG_REGS
 	// segment registers
 	mov	JB_SS(%ecx), %ss
-	mov	JB_CS(%ecx), %cs
+	// mov	JB_CS(%ecx), %cs		// can't set cs?
 	mov	JB_DS(%ecx), %ds
 	mov	JB_ES(%ecx), %es
 	mov	JB_FS(%ecx), %fs

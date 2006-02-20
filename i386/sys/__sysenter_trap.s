@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1999 Apple Computer, Inc. All rights reserved.
+ * Copyright (c) 2005 Apple Computer, Inc. All rights reserved.
  *
  * @APPLE_LICENSE_HEADER_START@
  * 
@@ -20,10 +20,11 @@
  * 
  * @APPLE_LICENSE_HEADER_END@
  */
-/*
- * Copyright (c) 1995 NeXT Computer, Inc. All Rights Reserved
- */
-#include "SYS.h"
 
-UNIX_SYSCALL_INT(sigaltstack, 3)
-	ret
+.text
+.align 2,0x90
+.private_extern __sysenter_trap
+__sysenter_trap:
+	popl %edx
+	movl %esp, %ecx
+	sysenter

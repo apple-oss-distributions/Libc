@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1999 Apple Computer, Inc. All rights reserved.
+ * Copyright (c) 2002 Apple Computer, Inc. All rights reserved.
  *
  * @APPLE_LICENSE_HEADER_START@
  * 
@@ -20,10 +20,16 @@
  * 
  * @APPLE_LICENSE_HEADER_END@
  */
-/*
- * Copyright (c) 1995 NeXT Computer, Inc. All Rights Reserved
- */
-#include "SYS.h"
 
-UNIX_SYSCALL_INT(sigaltstack, 3)
-	ret
+#include <sys/syscall.h>
+#include <architecture/i386/asm_help.h>
+#include <mach/i386/syscall_sw.h>
+
+.text
+.globl cerror
+LEAF(_i386_set_ldt, 0)
+	movl    $5,%eax
+	MACHDEP_SYSCALL_TRAP
+	jnb	2f
+	BRANCH_EXTERN(cerror)
+2:	ret
