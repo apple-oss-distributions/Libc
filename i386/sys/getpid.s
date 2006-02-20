@@ -59,6 +59,7 @@ LEAF(_getpid, 0)
 	UNIX_SYSCALL_NONAME(getpid, 0)
 	movl		%eax, %edx
 	xorl		%eax, %eax
+	GET_CURRENT_PID
 	lock
 	cmpxchgl	%edx, __current_pid
 	movl		%edx, %eax

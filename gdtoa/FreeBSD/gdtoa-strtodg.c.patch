@@ -1,5 +1,5 @@
---- gdtoa-strtodg.c.orig	2005-01-20 20:12:37.000000000 -0800
-+++ gdtoa-strtodg.c	2005-02-17 01:32:24.000000000 -0800
+--- gdtoa-strtodg.c.orig	2005-10-08 11:33:23.000000000 -0700
++++ gdtoa-strtodg.c	2005-10-08 11:40:57.000000000 -0700
 @@ -29,6 +29,8 @@
  /* Please send bug reports to David M. Gay (dmg at acm dot org,
   * with " at " changed at "@" and " dot " changed to ".").	*/
@@ -43,7 +43,7 @@
  #else
  	if (c == '.')
  #endif
-@@ -676,6 +679,9 @@
+@@ -668,6 +671,9 @@
  					rvb->x[0] = 0;
  					*exp = emin;
  					irv = STRTOG_Underflow | STRTOG_Inexlo;

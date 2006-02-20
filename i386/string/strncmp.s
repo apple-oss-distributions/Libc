@@ -22,39 +22,104 @@
  */
 
 
-// ***************
-// * S T R C M P *
-// ***************
+// *****************
+// * S T R N C M P *
+// *****************
 //
-// int	strcmp(const char *s1, const char *s2);
+// int	strncmp(const char *s1, const char *s2, size_t len);
 //
-// We optimize the compare by doing it in parallel, using SSE.  This introduces
+// We optimize the compare by doing it vector parallel.  This introduces
 // a complication: if we blindly did vector loads from both sides until
 // finding a difference (or 0), we might get a spurious page fault by
 // reading bytes past the difference.  To avoid this, we never do a load
 // that crosses a page boundary.
 
+#define	kShort	20			// too short for vectors (must be >16)
+
         .text
-        .globl _strcmp
+        .globl _strncmp
 
         .align 	4
-_strcmp:				// int strcmp(const char *s1,const char *s2);
+_strncmp:				// int strncmp(const char *s1, const char *s2, size_t len);
 	pushl	%esi
 	pushl	%edi
+	movl	20(%esp),%ecx		// get length
 	movl	12(%esp),%esi		// get LHS ptr
 	movl	16(%esp),%edi		// get RHS ptr
+	push	%ebx
+	cmpl	$(kShort),%ecx		// worth accelerating?
+	ja	LNotShort		// yes
 	
 
-// In order to avoid spurious page faults, we loop over:
+// Too short to bother with parallel compares.  Loop over bytes.
+//	%esi = LHS ptr
+//	%edi = RHS ptr
+//	%ecx = length (<= kShort)
+
+LShort:
+	testl	%ecx,%ecx		// 0-length?
+	jnz	LShortLoop		// no
+	jmp	LReturn0		// yes, return 0
+	.align	4,0x90			// align inner loops to optimize I-fetch
+LShortLoop:				// loop over bytes
+	movzb	(%esi),%eax		// get LHS byte
+	movzb	(%edi),%ebx		// get RHS byte
+	incl	%esi
+	incl	%edi
+	testl	%eax,%eax		// LHS==0 ?
+	jz	LNotEqual		// yes, this terminates comparison
+	subl	%ebx,%eax		// compare them
+	jnz	LExit			// done if not equal
+	decl	%ecx			// decrement length
+	jnz	LShortLoop
+LReturn0:
+	xorl	%eax,%eax		// all bytes equal, so return 0
+LExit:					// return value is in %eax
+	popl	%ebx
+	popl	%edi
+	popl	%esi
+	ret
+	
+LNotEqual:				// LHS in eax, RHS in ebx
+	subl	%ebx,%eax		// generate return value (nonzero)
+	popl	%ebx
+	popl	%edi
+	popl	%esi
+	ret
+
+	
+// Loop over bytes until we reach end of a page.
+//	%esi = LHS ptr
+//	%edi = RHS ptr
+//	%ecx = length remaining after end of loop (ie, already adjusted)
+//	%edx = #bytes until next page (1..15)
+
+	.align	4,0x90			// align inner loops to optimize I-fetch
+LLoopOverBytes:
+	movzb	(%esi),%eax		// get LHS byte
+	movzb	(%edi),%ebx		// get RHS byte
+	inc	%esi
+	inc	%edi
+	testl	%eax,%eax		// LHS==0 ?
+	jz	LNotEqual		// yes, this terminates comparison
+	subl	%ebx,%eax		// compare them
+	jnz	LExit			// done if not equal
+	dec	%edx			// more to go?
+	jnz	LLoopOverBytes
+	
+
+// Long enough to justify overhead of setting up vector compares.  In order to
+// avoid spurious page faults, we loop over:
 //
-//	min( bytes_in_LHS_page, bytes_in_RHS_page) >> 4
+//	min( length, bytes_in_LHS_page, bytes_in_RHS_page) >> 4
 //
 // 16-byte chunks.  When we near a page end, we have to revert to a byte-by-byte
 // comparison until reaching the next page, then resume the vector comparison.
 //	%esi = LHS ptr
 //	%edi = RHS ptr
+//	%ecx = length (> kShort)
 
-LNextChunk:
+LNotShort:
 	movl	%esi,%eax		// copy ptrs
 	movl	%edi,%edx
 	andl	$4095,%eax		// mask down to page offsets
@@ -63,37 +128,26 @@ LNextChunk:
 	cmova	%edx,%eax		// %eax = max(LHS offset, RHS offset);
 	movl	$4096,%edx
 	subl	%eax,%edx		// get #bytes to next page crossing
+	cmpl	%ecx,%edx		// will operand run out first?
+	cmova	%ecx,%edx		// get min(length remaining, bytes to page end)
 	movl	%edx,%eax
 	shrl	$4,%edx			// get #chunks till end of operand or page
 	jnz	LLoopOverChunks		// enter vector loop
-	movl	%eax,%edx		// no chunks...
-	jmp	LLoopOverBytes		// ...so loop over bytes until page end
-
-
-// Loop over bytes.
-//	%esi = LHS ptr
-//	%edi = RHS ptr
-//	%edx = byte count
-
-	.align	4,0x90			// align inner loops to optimize I-fetch
-LLoopOverBytes:
-	movzb	(%esi),%eax		// get LHS byte
-	movzb	(%edi),%ecx		// get RHS byte
-	inc	%esi
-	inc	%edi
-	testl	%eax,%eax		// 0?
-	jz	LExit0			// yes, we're done
-	subl	%ecx,%eax		// compare them
-	jnz	LExit			// done if not equal
-	dec	%edx			// more to go?
-	jnz	LLoopOverBytes
 	
-	jmp	LNextChunk		// we've come to end of page
+// Too near page end for vectors.
+
+	subl	%eax,%ecx		// adjust length remaining
+	movl	%eax,%edx		// %edx <- #bytes to page end
+	cmpl	$(kShort),%ecx		// will there be enough after we cross page for vectors?
+	ja	LLoopOverBytes		// yes
+	addl	%eax,%ecx		// no, restore total length remaining
+	jmp	LShortLoop		// compare rest byte-by-byte (%ecx != 0)
 
 
 // Loop over 16-byte chunks.
 //	%esi = LHS ptr
 //	%edi = RHS ptr
+//	%ecx = length remaining
 //	%edx = chunk count
 
 	.align	4,0x90			// align inner loops to optimize I-fetch
@@ -106,15 +160,18 @@ LLoopOverChunks:
 	pcmpeqb	%xmm1,%xmm0		// compare LHS to 0s
 	addl	$16,%edi
 	pmovmskb %xmm2,%eax		// get result mask for comparison of LHS and RHS
-	pmovmskb %xmm0,%ecx		// get result mask for 0 check
+	pmovmskb %xmm0,%ebx		// get result mask for 0 check
+	subl	$16,%ecx		// decrement length remaining
 	xorl	$0xFFFF,%eax		// complement compare mask so 1 means "not equal"
-	orl	%ecx,%eax		// combine the masks and check for 1-bits
+	orl	%ebx,%eax		// combine the masks and check for 1-bits
 	jnz	LFoundDiffOr0		// we found differing bytes or a 0-byte
 	dec	%edx			// more to go?
-	jnz	LLoopOverChunks
+	jnz	LLoopOverChunks		// yes
 	
-	jmp	LNextChunk		// compare up to next page boundary
-	
+	cmpl	$(kShort),%ecx		// a lot more to compare?
+	jbe	LShort			// no
+	jmp	LNotShort		// compute distance to next page crossing etc
+
 
 // Found a zero and/or a difference in vector compare.
 //	%esi = LHS ptr, already advanced by 16
@@ -127,19 +184,8 @@ LFoundDiffOr0:
 	subl	$16,%edi
 	movzb	(%esi,%edx),%eax	// get LHS byte
 	movzb	(%edi,%edx),%ecx	// get RHS byte
-	subl	%ecx,%eax		// compute difference (ie, return value)
+	popl	%ebx
 	popl	%edi
-	popl	%esi
-	ret
-
-
-// Found a zero and/or difference in byte loop.
-//	%eax = LHS byte
-//	%ecx = RHS byte
-
-LExit0:
 	subl	%ecx,%eax		// compute difference (ie, return value)
-LExit:					// here with difference already in %eax
-	popl	%edi
 	popl	%esi
 	ret

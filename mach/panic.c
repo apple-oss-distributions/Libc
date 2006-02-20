@@ -77,4 +77,7 @@ panic(const char *s, ...)
 
 #define RB_DEBUGGER	0x1000	/* enter debugger NOW */
 	(void) host_reboot(master_host_port, RB_DEBUGGER);
+
+	/* 4279008 - don't return */
+	abort();
 }

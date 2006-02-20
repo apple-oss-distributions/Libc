@@ -29,11 +29,7 @@ LDBLSRCS += asprintf.c fprintf.c fscanf.c fwprintf.c fwscanf.c printf.c \
 	    vswscanf.c vwprintf.c vwscanf.c wprintf.c wscanf.c
 
 .for _src in vfprintf-fbsd.c vfwprintf-fbsd.c
-CFLAGS-${_src} += -fshort-enums
-# add altivec options on per file basis, since it now disables inlining
-.if (${MACHINE_ARCH} == ppc) || (${MACHINE_ARCH} == ppc64)
-CFLAGS-${_src} += -faltivec -DALTIVEC
-.endif
+CFLAGS-${_src} += -fshort-enums -DVECTORS
 .endfor
 
 UNIX03SRCS+= freopen.c fwrite.c

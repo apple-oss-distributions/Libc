@@ -1,5 +1,5 @@
---- printf.3.orig	Fri Mar 11 17:08:43 2005
-+++ printf.3	Fri Mar 11 17:04:50 2005
+--- printf.3.orig	2004-11-25 11:38:35.000000000 -0800
++++ printf.3	2005-08-09 22:37:08.000000000 -0700
 @@ -101,6 +101,12 @@
  dynamically allocate a new string with
  .Xr malloc 3 .
@@ -19,10 +19,10 @@
  .It
 +An optional separator character (
 +.Cm \ , | \;  | \ : | _
-+) used for separating multiple values when printing an AltiVec vector,
++) used for separating multiple values when printing an AltiVec or SSE vector,
 +or other multi-value unit.
 +.Pp
-+NOTE: This is an AltiVec only extension onto the
++NOTE: This is an extension to the
 +.Fn printf
 +specification.
 +Behaviour of these values for
@@ -34,13 +34,13 @@
  An optional decimal digit string specifying a minimum field width.
  If the converted value has fewer characters than the field width, it will
  be padded with spaces on the left (or right, if the left-adjustment
-@@ -379,6 +399,28 @@
+@@ -379,6 +399,34 @@
  .It Sy Modifier Ta Cm c Ta Cm s
  .It Cm l No (ell) Ta Vt wint_t Ta Vt "wchar_t *"
  .El
 +.Pp
 +The AltiVec Technology Programming Interface Manual also defines five additional length modifiers
-+which can be used (in place of the conventional length modifiers) for the printing of AltiVec vectors:
++which can be used (in place of the conventional length modifiers) for the printing of AltiVec or SSE vectors:
 +.Bl -tag -compact
 +.It Cm v
 +Treat the argument as a vector value, unit length will be determined by the conversion
@@ -52,7 +52,7 @@
 +Treat the argument as a vector of 4 32-bit units.
 +.El
 +.Pp
-+NOTE: The vector length specifiers are AltiVec only extensions onto the
++NOTE: The vector length specifiers are extensions to the
 +.Fn printf
 +specification.
 +Behaviour of these values for
@@ -60,10 +60,16 @@
 +is only defined for operating systems conforming to the 
 +AltiVec Technology Programming Interface Manual.
 +(At time of writing this includes only Mac OS X 10.2 and later.)
++.Pp
++As a further extension, for SSE2 64-bit units:
++.Bl -tag -compact
++.It Cm vll, llv
++Treat the argument as a vector of 2 64-bit units.
++.El
  .It
  A character that specifies the type of conversion to be applied.
  .El
-@@ -792,12 +834,8 @@
+@@ -792,12 +840,8 @@
  .Xr fmtcheck 3 ,
  .Xr scanf 3 ,
  .Xr setlocale 3 ,

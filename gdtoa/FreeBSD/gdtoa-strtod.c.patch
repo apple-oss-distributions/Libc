@@ -1,5 +1,5 @@
---- gdtoa-strtod.c.orig	2005-01-20 20:12:37.000000000 -0800
-+++ gdtoa-strtod.c	2005-02-17 01:31:26.000000000 -0800
+--- gdtoa-strtod.c.orig	2005-10-08 11:32:33.000000000 -0700
++++ gdtoa-strtod.c	2005-10-08 11:38:17.000000000 -0700
 @@ -29,6 +29,8 @@
  /* Please send bug reports to David M. Gay (dmg at acm dot org,
   * with " at " changed at "@" and " dot " changed to ".").	*/
@@ -7,9 +7,9 @@
 +#include "xlocale_private.h"
 +
  #include "gdtoaimp.h"
- 
- #ifdef USE_LOCALE
-@@ -56,11 +58,11 @@
+ #ifndef NO_FENV_H
+ #include <fenv.h>
+@@ -59,11 +61,11 @@
  #endif
  
   double
@@ -24,16 +24,16 @@
  #endif
  {
  #ifdef Avoid_Underflow
-@@ -112,7 +114,7 @@
- 		switch(s[1]) {
- 		  case 'x':
- 		  case 'X':
--			switch((i = gethex(&s, &fpi, &exp, &bb, sign)) & STRTOG_Retmask) {
-+			switch((i = gethex(&s, &fpi, &exp, &bb, sign, loc)) & STRTOG_Retmask) {
+@@ -126,7 +128,7 @@
+ #else
+ #define fpi1 fpi
+ #endif
+-			switch((i = gethex(&s, &fpi1, &exp, &bb, sign)) & STRTOG_Retmask) {
++			switch((i = gethex(&s, &fpi1, &exp, &bb, sign, loc)) & STRTOG_Retmask) {
  			  case STRTOG_NoNumber:
  				s = s00;
  				sign = 0;
-@@ -142,8 +144,9 @@
+@@ -156,8 +158,9 @@
  		else if (nd < 16)
  			z = 10*z + c - '0';
  	nd0 = nd;
@@ -44,7 +44,7 @@
  #else
  	if (c == '.')
  #endif
-@@ -966,3 +969,13 @@
+@@ -980,3 +983,13 @@
  	return sign ? -dval(rv) : dval(rv);
  	}
  

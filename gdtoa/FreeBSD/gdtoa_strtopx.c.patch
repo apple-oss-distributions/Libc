@@ -1,5 +1,5 @@
 --- gdtoa_strtopx.c.orig	2005-01-20 20:12:37.000000000 -0800
-+++ gdtoa_strtopx.c	2005-02-17 01:54:02.000000000 -0800
++++ gdtoa_strtopx.c	2005-10-08 17:10:15.000000000 -0700
 @@ -29,6 +29,8 @@
  /* Please send bug reports to David M. Gay (dmg at acm dot org,
   * with " at " changed at "@" and " dot " changed to ".").	*/
@@ -30,3 +30,13 @@
  	switch(k & STRTOG_Retmask) {
  	  case STRTOG_NoNumber:
  	  case STRTOG_Zero:
+@@ -87,7 +89,8 @@
+ 
+ 	  case STRTOG_Infinite:
+ 		L[_0] = 0x7fff;
+-		L[_1] = L[_2] = L[_3] = L[_4] = 0;
++		L[_1] = 0x8000;
++		L[_2] = L[_3] = L[_4] = 0;
+ 		break;
+ 
+ 	  case STRTOG_NaN:

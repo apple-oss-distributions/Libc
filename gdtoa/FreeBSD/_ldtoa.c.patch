@@ -1,5 +1,5 @@
---- _ldtoa.c.orig	2004-12-08 22:50:28.000000000 -0800
-+++ _ldtoa.c	2004-12-08 22:52:58.000000000 -0800
+--- _ldtoa.c.orig	2004-06-03 15:17:18.000000000 -0700
++++ _ldtoa.c	2005-10-08 22:43:25.000000000 -0700
 @@ -61,14 +61,34 @@
  	char *ret;
  	union IEEEl2bits u;
@@ -35,22 +35,22 @@
  		kind = STRTOG_Normal;
  #ifdef	LDBL_IMPLICIT_NBIT
  		bits[LDBL_MANT_DIG / 32] |= 1 << ((LDBL_MANT_DIG - 1) % 32);
-@@ -77,12 +97,14 @@
+@@ -77,12 +97,12 @@
  	case FP_ZERO:
  		kind = STRTOG_Zero;
  		break;
 +#if !defined(__ppc__) && !defined(__ppc64__)
  	case FP_SUBNORMAL:
  		kind = STRTOG_Denormal;
- #ifdef	LDBL_IMPLICIT_NBIT
+-#ifdef	LDBL_IMPLICIT_NBIT
  		be++;
- #endif
+-#endif
  		break;
 +#endif /* !defined(__ppc__) && !defined(__ppc64__) */
  	case FP_INFINITE:
  		kind = STRTOG_Infinite;
  		break;
-@@ -96,5 +118,9 @@
+@@ -96,5 +116,9 @@
  	ret = gdtoa(&fpi, be, (ULong *)bits, &kind, mode, ndigits, decpt, rve);
  	if (*decpt == -32768)
  		*decpt = INT_MAX;

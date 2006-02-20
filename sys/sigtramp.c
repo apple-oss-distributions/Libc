@@ -42,10 +42,10 @@ int __in_sigtramp = 0;
 
 /* These defn should match the kernel one */
 #define UC_TRAD			1
+#define UC_FLAVOR		30
 #if defined(__ppc__) || defined(__ppc64__)
 #define UC_TRAD64		20
 #define UC_TRAD64_VEC		25
-#define UC_FLAVOR		30
 #define UC_FLAVOR_VEC		35
 #define UC_FLAVOR64		40
 #define UC_FLAVOR64_VEC		45
@@ -164,11 +164,11 @@ _sigtramp(
 	siginfo_t		*sinfo,
 	ucontext_t		*uctx
 ) {
-#if defined(__ppc__) || defined(__ppc64__)
 	int ctxstyle = UC_FLAVOR;
-#endif
+#if defined(__ppc__) || defined(__ppc64__)
 	mcontext_t mctx;
 	mcontext64_t mctx64;
+#endif
 
 #if defined(__DYNAMIC__)
         __in_sigtramp++;
@@ -176,6 +176,9 @@ _sigtramp(
 #ifdef __i386__
 	if (sigstyle == UC_TRAD)
         	sa_handler(sig);
+	else {
+		sa_sigaction(sig, sinfo, uctx);
+	}
 #elif defined(__ppc__) || defined(__ppc64__)
 	if ((sigstyle == UC_TRAD) || (sigstyle == UC_TRAD64) || (sigstyle == UC_TRAD64_VEC))
         	sa_handler(sig);
@@ -209,14 +212,8 @@ _sigtramp(
 #if defined(__DYNAMIC__)
         __in_sigtramp--;
 #endif
-#if defined(__ppc__) || defined(__ppc64__)
-	{
         /* sigreturn(uctx, ctxstyle); */
 	/* syscall (SYS_SIGRETURN, uctx, ctxstyle); */
 	syscall (184, uctx, ctxstyle);
-	}
-#else
-	sigreturn(uctx);
-#endif /* __ppc__ || __ppc64__ */
 }
 

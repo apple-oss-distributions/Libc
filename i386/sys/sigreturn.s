@@ -25,5 +25,5 @@
  */
 #include "SYS.h"
 
-UNIX_SYSCALL(sigreturn, 1)
+UNIX_SYSCALL_INT(sigreturn, 2)
 	ret

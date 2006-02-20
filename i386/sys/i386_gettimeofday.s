@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1999 Apple Computer, Inc. All rights reserved.
+ * Copyright (c) 1999-2005 Apple Computer, Inc. All rights reserved.
  *
  * @APPLE_LICENSE_HEADER_START@
  * 
@@ -20,10 +20,25 @@
  * 
  * @APPLE_LICENSE_HEADER_END@
  */
-/*
- * Copyright (c) 1995 NeXT Computer, Inc. All Rights Reserved
- */
+/* Copyright 1998 Apple Computer, Inc. */
+
 #include "SYS.h"
 
-UNIX_SYSCALL_INT(sigaltstack, 3)
+#define	__APPLE_API_PRIVATE
+#include <machine/cpu_capabilities.h>
+#undef	__APPLE_API_PRIVATE
+
+LABEL(___commpage_gettimeofday)
+	mov		$ _COMM_PAGE_GETTIMEOFDAY,%eax
+	jmp		%eax
+
+/*
+ *	This syscall is special cased: the timeval is returned in eax/edx.
+ */
+LABEL(___gettimeofday)
+    UNIX_SYSCALL_INT_NONAME(gettimeofday,0)
+	mov		4(%esp),%ecx
+	mov		%eax,(%ecx)
+	mov		%edx,4(%ecx)
+	xor		%eax,%eax
 	ret

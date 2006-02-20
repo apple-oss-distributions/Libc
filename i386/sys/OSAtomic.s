@@ -117,6 +117,11 @@ DECLARE(_OSAtomicAdd64)
 DECLARE(_OSAtomicTestAndSet)
 	movl	4(%esp), %eax
 	movl	8(%esp), %edx
+	movl	%eax, %ecx
+	andl	$-8, %ecx
+	notl	%eax
+	andl	$7, %eax
+	orl	%ecx, %eax
 	call	*_COMM_PAGE_BTS
 	setc	%al
 	ret
@@ -124,6 +129,11 @@ DECLARE(_OSAtomicTestAndSet)
 DECLARE(_OSAtomicTestAndClear)
 	movl	4(%esp), %eax
 	movl	8(%esp), %edx
+	movl	%eax, %ecx
+	andl	$-8, %ecx
+	notl	%eax
+	andl	$7, %eax
+	orl	%ecx, %eax
 	call	*_COMM_PAGE_BTC
 	setc	%al
 	ret
