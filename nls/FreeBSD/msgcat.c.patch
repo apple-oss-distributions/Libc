@@ -1,6 +1,6 @@
---- msgcat.c.orig	2004-11-25 11:38:30.000000000 -0800
-+++ msgcat.c	2005-02-27 12:06:52.000000000 -0800
-@@ -45,7 +45,7 @@
+--- /Network/Servers/hills/Volumes/capanna/josborne/work-area/PR-4416984/Libc/nls/FreeBSD/msgcat.c	2004-11-25 11:38:30.000000000 -0800
++++ msgcat.c	2006-02-21 12:46:25.000000000 -0800
+@@ -45,16 +45,23 @@
  #include <errno.h>
  #include <fcntl.h>
  #include <limits.h>
@@ -9,16 +9,24 @@
  #include <nl_types.h>
  #include <stdio.h>
  #include <stdlib.h>
-@@ -54,7 +54,7 @@
+ #include <string.h>
+ #include <unistd.h>
++#include <machine/endian.h>
++#include <libkern/OSByteOrder.h>
  #include "un-namespace.h"
  
  #include "msgcat.h"
 -#include "../locale/setlocale.h"        /* for ENCODING_LEN */
 +#include "setlocale.h"        /* for ENCODING_LEN */
++
++#ifndef htonll
++#define htonll(x) OSSwapHostToBigInt64(x)
++#define ntohll(x) OSSwapBigToHostInt64(x)
++#endif
  
  #define _DEFAULT_NLS_PATH "/usr/share/nls/%L/%N.cat:/usr/share/nls/%N/%L:/usr/local/share/nls/%L/%N.cat:/usr/local/share/nls/%N/%L"
  
-@@ -87,7 +87,7 @@
+@@ -87,7 +94,7 @@
  		return (loadCat(name));
  
  	if (type == NL_CAT_LOCALE)
@@ -27,3 +35,174 @@
  	else
  		lang = getenv("LANG");
  
+@@ -210,21 +217,21 @@
+ 
+ #define LOOKUP(PARENT, CHILD, ID, NUM, SET) {                    \
+ 	lo = 0;                                                  \
+-	if (ID - 1 < PARENT->NUM) {                              \
++	if (ID - 1 < NUM) {                              \
+ 		cur = ID - 1;                                    \
+ 		hi = ID;                                         \
+ 	} else {                                                 \
+-		hi = PARENT->NUM;                                \
++		hi = NUM;                                \
+ 		cur = (hi - lo) / 2;                             \
+ 	}                                                        \
+ 	while (TRUE) {                                           \
+ 		CHILD = PARENT->SET + cur;                       \
+-		if (CHILD->ID == ID)                             \
++		if (htonl(CHILD->ID) == ID)                             \
+ 			break;                                   \
+-		if (CHILD->ID < ID) {                            \
++		if (htonl(CHILD->ID) < ID) {                            \
+ 			lo = cur + 1;                            \
+-			if (hi > cur + (ID - CHILD->ID) + 1)     \
+-				hi = cur + (ID - CHILD->ID) + 1; \
++			if (hi > cur + (ID - htonl(CHILD->ID)) + 1)     \
++				hi = cur + (ID - htonl(CHILD->ID)) + 1; \
+ 			dir = 1;                                 \
+ 		} else {                                         \
+ 			hi = cur;                                \
+@@ -240,32 +247,28 @@
+ }
+ 
+ static MCSetT *
+-MCGetSet(cat, setId)
+-	MCCatT  *cat;
+-	int     setId;
++MCGetSet(MCCatT *cat, int setId)
+ {
+ 	MCSetT  *set;
+ 	long    lo, hi, cur, dir;
+ 
+ 	if (cat == NULL || setId <= 0)
+ 		return (NULL);
+-	LOOKUP(cat, set, setId, numSets, sets);
++	LOOKUP(cat, set, setId, cat->numSets, sets);
+ 	if (set->invalid && loadSet(cat, set) <= 0)
+ 		return (NULL);
+ 	return (set);
+ }
+ 
+ static MCMsgT *
+-MCGetMsg(set, msgId)
+-	MCSetT  *set;
+-	int     msgId;
++MCGetMsg(MCSetT *set, int msgId)
+ {
+ 	MCMsgT  *msg;
+ 	long    lo, hi, cur, dir;
+ 
+ 	if (set == NULL || set->invalid || msgId <= 0)
+ 		return (NULL);
+-	LOOKUP(set, msg, msgId, numMsgs, u.msgs);
++	LOOKUP(set, msg, msgId, htonl(set->numMsgs), u.msgs);
+ 	return (msg);
+ }
+ 
+@@ -377,27 +380,30 @@
+ 	    strncmp(header.magic, MCMagic, MCMagicLen) != 0)
+ 		CORRUPT();
+ 
+-	if (header.majorVer != MCMajorVer) {
++	if (htonl(header.majorVer) != MCMajorVer) {
+ 		(void)fclose(cat->fp);
+ 		free(cat);
+-		(void)fprintf(stderr, "%s: %s is version %ld, we need %ld.\n",
+-		    _errowner, catpath, header.majorVer, MCMajorVer);
++		if (OSSwapInt32(htonl(header.majorVer)) == MCMajorVer) {
++		    (void)fprintf(stderr, "%s: %s is the wrong byte ordering.\n", _errowner, catpath);
++		} else {
++		    (void)fprintf(stderr, "%s: %s is version %ld, we need %ld.\n", _errowner, catpath, htonl(header.majorVer), MCMajorVer);
++		}
+ 		NLRETERR(EFTYPE);
+ 	}
+-	if (header.numSets <= 0) {
++	if (htonl(header.numSets) <= 0) {
+ 		(void)fclose(cat->fp);
+ 		free(cat);
+ 		(void)fprintf(stderr, "%s: %s has %ld sets!\n",
+-		    _errowner, catpath, header.numSets);
++		    _errowner, catpath, htonl(header.numSets));
+ 		NLRETERR(EFTYPE);
+ 	}
+ 
+-	cat->numSets = header.numSets;
+-	if ((cat->sets = (MCSetT *)malloc(sizeof(MCSetT) * header.numSets)) ==
++	cat->numSets = htonl(header.numSets);
++	if ((cat->sets = (MCSetT *)malloc(sizeof(MCSetT) * cat->numSets)) ==
+ 	    NULL)
+ 		NOSPACE();
+ 
+-	nextSet = header.firstSet;
++	nextSet = htonll(header.firstSet);
+ 	for (i = 0; i < cat->numSets; ++i) {
+ 		if (fseeko(cat->fp, nextSet, SEEK_SET) == -1) {
+ 			__nls_free_resources(cat, i);
+@@ -414,7 +420,7 @@
+ 		/* if it's invalid, skip over it (and backup 'i') */
+ 		if (set->invalid) {
+ 			--i;
+-			nextSet = set->nextSet;
++			nextSet = htonll(set->nextSet);
+ 			continue;
+ 		}
+ #if 0
+@@ -432,7 +438,7 @@
+ 		} else
+ #endif
+ 			set->invalid = TRUE;
+-		nextSet = set->nextSet;
++		nextSet = htonll(set->nextSet);
+ 	}
+ #if 0
+ 	if (cat->loadType == MCLoadAll) {
+@@ -453,11 +459,11 @@
+ 	int     saverr;
+ 
+ 	/* Get the data */
+-	if (fseeko(cat->fp, set->data.off, SEEK_SET) == -1)
++	if (fseeko(cat->fp, htonll(set->data.off), SEEK_SET) == -1)
+ 		return (0);
+-	if ((set->data.str = malloc(set->dataLen)) == NULL)
++	if ((set->data.str = malloc(htonl(set->dataLen))) == NULL)
+ 		return (-1);
+-	if (fread(set->data.str, set->dataLen, 1, cat->fp) != 1) {
++	if (fread(set->data.str, htonl(set->dataLen), 1, cat->fp) != 1) {
+ 		saverr = errno;
+ 		free(set->data.str);
+ 		errno = saverr;
+@@ -465,13 +471,13 @@
+ 	}
+ 
+ 	/* Get the messages */
+-	if (fseeko(cat->fp, set->u.firstMsg, SEEK_SET) == -1) {
++	if (fseeko(cat->fp, htonll(set->u.firstMsg), SEEK_SET) == -1) {
+ 		saverr = errno;
+ 		free(set->data.str);
+ 		errno = saverr;
+ 		return (0);
+ 	}
+-	if ((set->u.msgs = (MCMsgT *)malloc(sizeof(MCMsgT) * set->numMsgs)) ==
++	if ((set->u.msgs = (MCMsgT *)malloc(sizeof(MCMsgT) * htonl(set->numMsgs))) ==
+ 	    NULL) {
+ 		saverr = errno;
+ 		free(set->data.str);
+@@ -479,7 +485,7 @@
+ 		return (-1);
+ 	}
+ 
+-	for (i = 0; i < set->numMsgs; ++i) {
++	for (i = 0; i < htonl(set->numMsgs); ++i) {
+ 		msg = set->u.msgs + i;
+ 		if (fread(msg, sizeof(*msg), 1, cat->fp) != 1) {
+ 			saverr = errno;
+@@ -492,7 +498,7 @@
+ 			--i;
+ 			continue;
+ 		}
+-		msg->msg.str = (char *)(set->data.str + msg->msg.off);
++		msg->msg.str = (char *)(set->data.str + htonll(msg->msg.off));
+ 	}
+ 	set->invalid = FALSE;
+ 	return (1);

@@ -21,15 +21,3 @@
  * @APPLE_LICENSE_HEADER_END@
  */
 
-#ifndef _OPEN_SOURCE_
-
-#define __APPLE_API_PRIVATE
-#include <machine/cpu_capabilities.h>
-#undef  __APPLE_API_PRIVATE
-
-const void* __commpage_dsmos()
-{
-	return ((const void*) _COMM_PAGE_SYSTEM_INTEGRITY);
-}
-
-#endif
