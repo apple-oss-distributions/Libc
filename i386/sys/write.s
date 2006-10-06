@@ -23,7 +23,7 @@
 /*
  * Copyright (c) 1995 NeXT Computer, Inc. All Rights Reserved
  */
-#include "SYS.h"
+#include <SYS.h>
 
 UNIX_SYSCALL(write, 3)
 	ret

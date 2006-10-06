@@ -5,7 +5,8 @@
 .PATH: ${.CURDIR}/pthreads
 
 MISRCS +=                  pthread_cond.c pthread_tsd.c pthread.c \
-        pthread_mutex.c    thread_setup.c lock.s   stack.s pthread_rwlock.c
+        pthread_mutex.c    thread_setup.c stack.s pthread_rwlock.c \
+		lock.s
 
 PTHREADS_INSTHDRS += pthread.h pthread_impl.h sched.h
 PTHREADS_INSTHDRS := ${PTHREADS_INSTHDRS:S/^/${.CURDIR}\/pthreads\//}

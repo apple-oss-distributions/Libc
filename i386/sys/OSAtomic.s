@@ -109,7 +109,7 @@ DECLARE(_OSAtomicAdd64)
 	call	*_COMM_PAGE_COMPARE_AND_SWAP64
 	jnz	1b
 	movl	%ebx, %eax
-	movl	%ecx, %ebx
+	movl	%ecx, %edx
 	popl	%esi
 	popl	%ebx	
 	ret
@@ -142,13 +142,13 @@ DECLARE(_OSAtomicTestAndClear)
 .globl _OSSpinLockTry
 _OSSpinLockTry:
 	movl	$(_COMM_PAGE_SPINLOCK_TRY), %eax
-	jmpl	%eax
+	jmpl	*%eax
 
 .align 2, 0x90
 .globl _OSSpinLockLock
 _OSSpinLockLock:
 	movl	$(_COMM_PAGE_SPINLOCK_LOCK), %eax
-	jmpl	%eax
+	jmpl	*%eax
 
 .align 2, 0x90
 .globl _OSSpinLockUnlock

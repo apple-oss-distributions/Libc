@@ -1,4 +1,6 @@
 .PATH: ${.CURDIR}/i386/sys
+
+AINC+= -I${.CURDIR}/i386/sys
 MDSRCS+=  ATPgetreq.s \
 	ATPgetrsp.s \
 	ATPsndreq.s \

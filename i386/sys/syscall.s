@@ -23,7 +23,7 @@
 /*
  * Copyright (c) 1995 NeXT Computer, Inc. All Rights Reserved
  */
-#include "SYS.h"
+#include <SYS.h>
 
 LEAF(_syscall, 0)
 	popl	%ecx		// ret addr

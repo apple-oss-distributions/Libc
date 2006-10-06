@@ -23,7 +23,7 @@
 /*
  * Copyright (c) 1995 NeXT Computer, Inc. All Rights Reserved
  */
-#include "SYS.h"
+#include <SYS.h>
 
 UNIX_SYSCALL_INT(pipe, 0)
 	movl	4(%esp),%ecx

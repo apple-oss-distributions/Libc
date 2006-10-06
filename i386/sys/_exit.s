@@ -23,7 +23,7 @@
 /*
  * Copyright (c) 1995 NeXT Computer, Inc. All Rights Reserved
  */
-#include "SYS.h"
+#include <SYS.h>
 
 PSEUDO(_exit, exit, 1)
 	ret

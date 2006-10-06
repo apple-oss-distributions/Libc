@@ -56,7 +56,7 @@ _memset:				// void *memset(void *b, int c, size_t len);
 	
 	movl	$(_COMM_PAGE_BZERO),%eax// map memset(p,0,n) into bzero(p,n)
 	movl	%edx,8(%esp)		// put count where bzero() expects it
-	jmp	%eax			// enter commpage
+	jmp	*%eax			// enter commpage
 
 
 	// Handle memset of a nonzero value.
@@ -136,7 +136,7 @@ LCallCommpage:
 	jnz	1b
 2:					// ptr aligned, length long enough to justify
 	movl	$(_COMM_PAGE_MEMSET_PATTERN),%eax
-	call	%eax			// call commpage to do the heavy lifting
+	call	*%eax			// call commpage to do the heavy lifting
 	movl	12(%esp),%eax		// get return value (ie, original ptr)
 	popl	%esi
 	popl	%edi
@@ -235,7 +235,7 @@ LAlignPtr:				// NB: can drop down to here!
 
 LReady:
 	movl	$(_COMM_PAGE_MEMSET_PATTERN),%eax
-	call	%eax			// call commpage to do the heavy lifting
+	call	*%eax			// call commpage to do the heavy lifting
 	popl	%esi
 	popl	%edi
 	ret

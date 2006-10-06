@@ -42,9 +42,11 @@
 
 #include <architecture/i386/asm_help.h>
 
-#define JB_ONSTACK      0
+// The FP control word is actually two bytes, but there's no harm in
+// using four bytes for it and keeping the struct aligned.
+#define JB_FPCW         0
 #define JB_MASK         4
-#define JB_EAX          8
+#define JB_MXCSR        8
 #define JB_EBX          12
 #define JB_ECX          16
 #define JB_EDX          20
@@ -66,7 +68,9 @@
 LEAF(__setjmp, 0)
         movl    4(%esp), %ecx           // jmp_buf (struct sigcontext *)
 
-        // now build sigcontext
+        // Build the jmp_buf
+        fnstcw  JB_FPCW(%ecx)			// Save the FP control word
+        stmxcsr JB_MXCSR(%ecx)			// Save the MXCSR
         movl    %ebx, JB_EBX(%ecx)
         movl    %edi, JB_EDI(%ecx)
         movl    %esi, JB_ESI(%ecx)
@@ -101,13 +105,9 @@ LEAF(__setjmp, 0)
 
 
 LEAF(__longjmp, 0)
-	subl	$2,%esp
-	fnstcw	(%esp)			// save FP control word
 	fninit				// reset FP coprocessor
-	fldcw	(%esp)			// restore FP control word
-	addl	$2,%esp
 
-        movl    4(%esp), %ecx           // jmp_buf (struct sigcontext *)
+	movl    4(%esp), %ecx           // jmp_buf (struct sigcontext *)
 	movl	8(%esp), %eax		// return value
 	testl	%eax, %eax
 	jnz 1f
@@ -119,6 +119,8 @@ LEAF(__longjmp, 0)
 	movl	JB_EDI(%ecx), %edi
 	movl	JB_EBP(%ecx), %ebp
 	movl	JB_ESP(%ecx), %esp
+	fldcw	JB_FPCW(%ecx)			// Restore FP control word
+	ldmxcsr JB_MXCSR(%ecx)			// Restore the MXCSR
 
 #if SAVE_SEG_REGS
 	// segment registers

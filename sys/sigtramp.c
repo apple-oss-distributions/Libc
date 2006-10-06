@@ -173,7 +173,7 @@ _sigtramp(
 #if defined(__DYNAMIC__)
         __in_sigtramp++;
 #endif
-#ifdef __i386__
+#if defined(__i386__) || defined(__x86_64__)
 	if (sigstyle == UC_TRAD)
         	sa_handler(sig);
 	else {

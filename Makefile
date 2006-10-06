@@ -19,15 +19,15 @@ SHLIB_MINOR= 0
 .if (${MACHINE_ARCH} == unknown)
 MACHINE_ARCH != /usr/bin/arch
 .endif 
+.if !empty $(MACHINE_ARCH:M*64)
+LP64 = 1
+.endif
 CC = gcc-4.0
 # always set __DARWIN_UNIX03 to zero (variant will set to one) except for ppc64
-.if (${MACHINE_ARCH} == ppc64)
+.ifdef LP64
 CFLAGS += -D__DARWIN_UNIX03=1
 .else
 CFLAGS += -D__DARWIN_UNIX03=0
-.endif
-.if (${MACHINE_ARCH} == i386)
-CFLAGS += -march=prescott -msse3
 .endif
 CFLAGS += -D__LIBC__ -DNOID -I${.CURDIR}/include
 .ifdef ALTLIBCHEADERS

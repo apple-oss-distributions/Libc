@@ -23,7 +23,7 @@
 /*
  * Copyright (c) 2002 Apple Computer, Inc. All Rights Reserved
  */
-#include "SYS.h"
+#include <SYS.h>
 
 UNIX_SYSCALL(__pthread_canceled, 1)
 	ret

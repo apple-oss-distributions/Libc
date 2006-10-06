@@ -22,7 +22,7 @@
  */
 /* Copyright 1998 Apple Computer, Inc. */
 
-#include "SYS.h"
+#include <SYS.h>
 
 PSEUDO(posix_madvise, madvise, 3)
 	ret

@@ -23,7 +23,7 @@
 /*
  * Copyright (c) 1995 NeXT Computer, Inc. All Rights Reserved
  */
-#include "SYS.h"
+#include <SYS.h>
 
 UNIX_SYSCALL(load_shared_file, 7)
 	ret

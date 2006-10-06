@@ -66,7 +66,7 @@ static inline void copy_pages(const void *source, void *dest, unsigned bytes) {
 // called when MallocStackLogging is set anyway, so they won't affect normal usage.
 
 static __attribute__((noinline)) void *first_frame_address(void) {
-#if defined(__i386__)
+#if defined(__i386__) || defined(__x86_64__)
     return __builtin_frame_address(0);
 #elif defined(__ppc__) || defined(__ppc64__)
     void *addr;
@@ -81,8 +81,8 @@ static __attribute__((noinline)) void *first_frame_address(void) {
 
 static __attribute__((noinline)) void *next_frame_address(void *addr) {
     void *ret;
-#if defined(__MACH__) && defined(__i386__)
-    __asm__ volatile("movl (%1),%0" : "=r" (ret) : "r" (addr));
+#if defined(__MACH__) && (defined(__i386__) || defined(__x86_64__))
+    __asm__ volatile("mov (%1),%0" : "=r" (ret) : "r" (addr));
 #elif defined(__MACH__) && (defined(__ppc__) || defined(__ppc64__))
     __asm__ volatile("lwz %0,0x0(%1)" : "=r" (ret) : "b" (addr));
 #elif defined(__hpux__)
@@ -96,7 +96,7 @@ static __attribute__((noinline)) void *next_frame_address(void *addr) {
     return ret;
 }
 
-#if defined(__i386__) || defined (__m68k__)
+#if defined(__i386__) || defined(__x86_64__) || defined (__m68k__)
 #define FP_LINK_OFFSET 1
 #elif defined(__ppc__) || defined(__ppc64__)
 #define FP_LINK_OFFSET 2

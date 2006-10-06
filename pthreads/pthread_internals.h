@@ -246,7 +246,7 @@ typedef struct {
 
 #include "pthread.h"
 
-#if defined(__i386__) || defined(__ppc64__)
+#if defined(__i386__) || defined(__ppc64__) || defined(__x86_64__)
 /*
  * Inside libSystem, we can use r13 or %gs directly to get access to the
  * thread-specific data area. The current thread is in the first slot.
@@ -255,8 +255,8 @@ inline static pthread_t __attribute__((__pure__))
 _pthread_self_direct(void)
 {
        pthread_t ret;
-#if defined(__i386__)
-       asm("movl %%gs:%P1, %0" : "=r" (ret) : "i" (offsetof(struct _pthread, tsd[0])));
+#if defined(__i386__) || defined(__x86_64__)
+       asm("mov %%gs:%P1, %0" : "=r" (ret) : "i" (offsetof(struct _pthread, tsd[0])));
 #elif defined(__ppc64__)
 	register const pthread_t __pthread_self asm ("r13");
 	ret = __pthread_self;

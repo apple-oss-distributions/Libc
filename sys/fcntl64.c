@@ -40,10 +40,13 @@ fcntl(int fd, int cmd, ...)
 	 case F_SETLK:
 	 case F_SETLKW:
 	 case F_PREALLOCATE:
+	 case F_SETSIZE:
 	 case F_RDADVISE:
 	 case F_READBOOTSTRAP:
 	 case F_WRITEBOOTSTRAP:
 	 case F_LOG2PHYS:
+	 case F_GETPATH:
+	 case F_PATHPKG_CHECK:
 		arg = va_arg(ap, void *);
 		break;
 	 default:

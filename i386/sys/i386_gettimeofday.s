@@ -22,7 +22,7 @@
  */
 /* Copyright 1998 Apple Computer, Inc. */
 
-#include "SYS.h"
+#include <SYS.h>
 
 #define	__APPLE_API_PRIVATE
 #include <machine/cpu_capabilities.h>
@@ -30,7 +30,7 @@
 
 LABEL(___commpage_gettimeofday)
 	mov		$ _COMM_PAGE_GETTIMEOFDAY,%eax
-	jmp		%eax
+	jmp		*%eax
 
 /*
  *	This syscall is special cased: the timeval is returned in eax/edx.

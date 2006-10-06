@@ -23,7 +23,7 @@
 /*
  * Copyright (c) 1998 Apple Computer, Inc. All Rights Reserved
  */
-#include "SYS.h"
+#include <SYS.h>
 
 UNIX_SYSCALL(lstatv, 0)
 	ret

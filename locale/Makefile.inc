@@ -44,10 +44,15 @@ CFLAGS-lconv.c += -D__APPLE_PR_3333969_HACK__
 
 # End hack for 3333969
 
-# for ppc64, we need to create rune32.h
-.if (${MACHINE_ARCH} == ppc64)
-# the following is good enough for ppc, ppc64 and i386
-ARCH32 != arch | sed 's/64//'
+# for LP64, we need to create rune32.h
+.ifdef LP64
+# the following is good enough for ppc, ppc64, i386 and x86_64
+_ARCH != arch
+.if $(_ARCH) == x86_64
+ARCH32 = i386
+.else
+ARCH32 = $(_ARCH:C/64$//)
+.endif
 rune.So rune.do rune.po rune.o: ${SYMROOT}/rune32.h
 ${SYMROOT}/rune32.h: ${SYMROOT}/rune-fbsd.c
 	${CC} -arch ${ARCH32} -DRUNEOFF32 -o ${SYMROOT}/rune32 ${.ALLSRC}

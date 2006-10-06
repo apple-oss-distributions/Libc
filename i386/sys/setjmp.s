@@ -43,11 +43,13 @@
  */
 
 #include <architecture/i386/asm_help.h>
-#include "SYS.h"
+#include <SYS.h>
 
-#define JB_ONSTACK	0
+// The FP control word is actually two bytes, but there's no harm in
+// using four bytes for it and keeping the struct aligned.
+#define JB_FPCW		0
 #define JB_MASK		4
-#define JB_EAX		8
+#define JB_MXCSR	8
 #define JB_EBX		12
 #define JB_ECX		16
 #define JB_EDX		20

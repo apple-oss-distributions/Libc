@@ -156,7 +156,7 @@ size_t _pthread_stack_size = 0;
 
 #if defined(__ppc__) || defined(__ppc64__)
 static const vm_address_t PTHREAD_STACK_HINT = 0xF0000000;
-#elif defined(__i386__)
+#elif defined(__i386__) || defined(__x86_64__)
 static const vm_address_t PTHREAD_STACK_HINT = 0xB0000000;
 #else
 #error Need to define a stack address hint for this architecture

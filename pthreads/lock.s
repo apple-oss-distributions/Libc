@@ -97,7 +97,7 @@ END(__spin_unlock)
 
 LEAF(__spin_lock_try, 0)
 	movl    $(_COMM_PAGE_SPINLOCK_TRY), %eax
-	jmpl	%eax
+	jmpl	*%eax
 
 	ALIGN
 
@@ -105,7 +105,7 @@ LEAF(__spin_lock_try, 0)
 LEAF(__spin_lock, 0)
 _spin_lock:
 	movl    $(_COMM_PAGE_SPINLOCK_LOCK), %eax
-	jmpl	%eax
+	jmpl	*%eax
 
 /*
  * void
@@ -120,7 +120,49 @@ _spin_lock:
 LEAF(__spin_unlock, 0)
 _spin_unlock:
 	movl    $(_COMM_PAGE_SPINLOCK_UNLOCK), %eax
-	jmpl	%eax
+	jmpl	*%eax
+
+#elif defined(__x86_64__)
+
+#include <architecture/i386/asm_help.h>  
+
+/*    
+ * void
+ * _spin_lock(p)
+ *      int *p;
+ *
+ * Lock the lock pointed to by p.  Spin (possibly forever) until the next
+ * lock is available.
+ */
+        TEXT
+	ALIGN
+
+LEAF(__spin_lock_try, 0)
+	movq	$(_COMM_PAGE_SPINLOCK_TRY), %rax
+	jmp		*%rax
+
+	ALIGN
+
+.globl _spin_lock
+LEAF(__spin_lock, 0)
+_spin_lock:
+	movq	$(_COMM_PAGE_SPINLOCK_LOCK), %rax
+	jmp		*%rax
+
+/*
+ * void
+ * _spin_unlock(p)
+ *      int *p;
+ *
+ * Unlock the lock pointed to by p.
+ */
+	ALIGN
+
+.globl _spin_unlock
+LEAF(__spin_unlock, 0)
+_spin_unlock:
+	movl	$0, (%rdi)
+	ret
 
 #else
 #error spin_locks not defined for this architecture

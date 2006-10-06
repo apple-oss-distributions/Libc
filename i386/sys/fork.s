@@ -23,7 +23,7 @@
 /*
  * Copyright (c) 1995 NeXT Computer, Inc. All Rights Reserved
  */
-#include "SYS.h"
+#include <SYS.h>
 
 LEAF(_fork, 0)
 	subl  $28, %esp   // Align the stack, with 16 bytes of extra padding that we'll need

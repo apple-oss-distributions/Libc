@@ -42,7 +42,7 @@ FBSDMISRCS = _rand48.c alarm.c assert.c \
 	telldir.c termios.c time.c times.c \
 	ttyname.c ttyslot.c ualarm.c ulimit.c unvis.c usleep.c utime.c vis.c \
 	wait.c wait3.c waitpid.c
-.if (${MACHINE_ARCH} != ppc64)
+.ifndef LP64
 FBSDMISRCS += timezone.c
 .endif
 FBSDHDRS = rand48.h telldir.h

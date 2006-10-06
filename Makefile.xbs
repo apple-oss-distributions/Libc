@@ -19,6 +19,8 @@
 # should only be installed once as well.  Both of these get done when
 # we're invoked as "Libc".
 
+BSDMAKE = bsdmake -f Makefile
+
 .PATH: .
 .MAIN: all
 all: libc.a libc_static.a libc_debug.a libc_profile.a
@@ -84,8 +86,8 @@ VARIANTS=
 VARIANTS+= LDBL
 MDSRCS += ldbl64.s
 .endif
-# build UNIX03 variant except on ppc64
-.if (${MACHINE_ARCH} != ppc64)
+# build UNIX03 variant except on LP64
+.ifndef LP64
 VARIANTS+= UNIX03
 .endif
 CFLAGS+= ${VARIANTCFLAGS}
@@ -103,29 +105,29 @@ VARIANTCOMBOCFLAGS != ${.CURDIR}/makeCombos ${COMBOARGS}
 .endif
 # For each of the variant combinations as target (and possibly suffixed with
 # _D, _P, and _S for the four kinds on compile styles, we create a subdirectory
-# to do the compiling in, and then call bsdmake with the new directory, and
+# to do the compiling in, and then call $(BSDMAKE) with the new directory, and
 # setting VARIANTCFLAGS, which are the extra flags to be added to CFLAGS.
 .for _v in ${VARIANTCOMBOCFLAGS}
 VARIANTCOMBOS+= ${_v:H:S,/,,}
 ${_v:H:S,/,,}:
 .ifdef ${_v:H:S,/,,}SRCS
 	mkdir -p ${MAKEOBJDIR}/${_v:H:S,/,,}; \
-	MAKEOBJDIR="$(MAKEOBJDIR)/${_v:H:S,/,,}" VARIANTCFLAGS="-DBUILDING_VARIANT ${_v:T:S/@/ /g}" bsdmake -C "${.CURDIR}" build_${_v:H:S,/,,}
+	MAKEOBJDIR="$(MAKEOBJDIR)/${_v:H:S,/,,}" VARIANTCFLAGS="-DBUILDING_VARIANT ${_v:T:S/@/ /g}" $(BSDMAKE) -C "${.CURDIR}" build_${_v:H:S,/,,}
 .endif
 ${_v:H:S,/,,}_D:
 .ifdef ${_v:H:S,/,,}SRCS
 	mkdir -p ${MAKEOBJDIR}/${_v:H:S,/,,}; \
-	MAKEOBJDIR="$(MAKEOBJDIR)/${_v:H:S,/,,}" VARIANTCFLAGS="-DBUILDING_VARIANT ${_v:T:S/@/ /g}" bsdmake -C "${.CURDIR}" build_${_v:H:S,/,,}_D
+	MAKEOBJDIR="$(MAKEOBJDIR)/${_v:H:S,/,,}" VARIANTCFLAGS="-DBUILDING_VARIANT ${_v:T:S/@/ /g}" $(BSDMAKE) -C "${.CURDIR}" build_${_v:H:S,/,,}_D
 .endif
 ${_v:H:S,/,,}_P:
 .ifdef ${_v:H:S,/,,}SRCS
 	mkdir -p ${MAKEOBJDIR}/${_v:H:S,/,,}; \
-	MAKEOBJDIR="$(MAKEOBJDIR)/${_v:H:S,/,,}" VARIANTCFLAGS="-DBUILDING_VARIANT ${_v:T:S/@/ /g}" bsdmake -C "${.CURDIR}" build_${_v:H:S,/,,}_P
+	MAKEOBJDIR="$(MAKEOBJDIR)/${_v:H:S,/,,}" VARIANTCFLAGS="-DBUILDING_VARIANT ${_v:T:S/@/ /g}" $(BSDMAKE) -C "${.CURDIR}" build_${_v:H:S,/,,}_P
 .endif
 ${_v:H:S,/,,}_S:
 .ifdef ${_v:H:S,/,,}SRCS
 	mkdir -p ${MAKEOBJDIR}/${_v:H:S,/,,}; \
-	MAKEOBJDIR="$(MAKEOBJDIR)/${_v:H:S,/,,}" VARIANTCFLAGS="-DBUILDING_VARIANT ${_v:T:S/@/ /g}" bsdmake -C "${.CURDIR}" build_${_v:H:S,/,,}_S
+	MAKEOBJDIR="$(MAKEOBJDIR)/${_v:H:S,/,,}" VARIANTCFLAGS="-DBUILDING_VARIANT ${_v:T:S/@/ /g}" $(BSDMAKE) -C "${.CURDIR}" build_${_v:H:S,/,,}_S
 .endif
 .endfor
 
@@ -136,7 +138,7 @@ ${_v:H:S,/,,}_S:
 .o-${_v}.o .do-${_v}.do .po-${_v}.po .So-${_v}.So:
 	mv ${.IMPSRC} ${.TARGET}
 
-# These are the build targets of the above bsdmake calls, which just builds
+# These are the build targets of the above $(BSDMAKE) calls, which just builds
 # using the standard rules, but with the additional flags.
 VARIANTOBJS+=  ${${_v}SRCS:N*.h:R:S/$/-${_v}.o/g:S,^,${_v}/,g}
 build_${_v}:   ${${_v}SRCS:N*.h:R:S/$/-${_v}.o/g}

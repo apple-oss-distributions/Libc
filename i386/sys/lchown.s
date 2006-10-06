@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2004 Apple Computer, Inc. All rights reserved.
+ * Copyright (c) 2004, 2006 Apple Computer, Inc. All rights reserved.
  *
  * @APPLE_LICENSE_HEADER_START@
  * 
@@ -20,10 +20,15 @@
  * 
  * @APPLE_LICENSE_HEADER_END@
  */
-#include "SYS.h"
+#include <SYS.h>
 
+#ifdef __LP64__
+UNIX_SYSCALL(lchown, 3)
+	ret
+#else /* !__LP64__ */
 PSEUDO(lchown$UNIX2003, lchown, 3)
 	ret
 
 UNIX_SYSCALL_ERR(lchown, 3, cerror_cvt)
 	ret
+#endif /* !__LP64__ */

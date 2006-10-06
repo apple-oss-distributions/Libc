@@ -20,7 +20,7 @@
  * 
  * @APPLE_LICENSE_HEADER_END@
  */
-#include "SYS.h"
+#include <SYS.h>
 
 UNIX_SYSCALL(kqueue, 0)
 	ret

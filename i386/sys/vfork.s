@@ -23,7 +23,7 @@
 /*
  * Copyright (c) 1995 NeXT Computer, Inc. All Rights Reserved
  */
-#include "SYS.h"
+#include <SYS.h>
 
 #if defined(__DYNAMIC__)
 #define GET_CURRENT_PID	PICIFY(__current_pid)
