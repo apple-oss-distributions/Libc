@@ -22,9 +22,11 @@
  */
 
 extern void __xlocale_init(void);
+extern void __guard_setup(void);
 
 __private_extern__ void
 other_libc_init(void)
 {
 	__xlocale_init();
+	__guard_setup();
 }

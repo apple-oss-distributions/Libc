@@ -1,0 +1,15 @@
+--- stack_protector.c.orig	2006-10-05 00:09:07.000000000 -0700
++++ stack_protector.c	2006-10-05 00:18:28.000000000 -0700
+@@ -34,10 +34,10 @@
+ #include <syslog.h>
+ 
+ long __guard[8] = {0, 0, 0, 0, 0, 0, 0, 0};
+-static void __guard_setup(void) __attribute__ ((constructor));
++__private_extern__ void __guard_setup(void);
+ void __stack_smash_handler(char func[], int damaged __attribute__((unused)));
+ 
+-static void
++__private_extern__ void
+ __guard_setup(void)
+ {
+   int fd;

@@ -150,6 +150,7 @@ vsyslog(pri, fmt, ap)
 #define	FMT_LEN		1024
 	char *stdp, tbuf[TBUF_LEN], fmt_cpy[FMT_LEN];
 	int tbuf_left, fmt_left, prlen;
+	struct tm tm;
 	
 #define	INTERNALLOG	LOG_ERR|LOG_CONS|LOG_PERROR|LOG_PID
 	/* Check for invalid bits. */
@@ -222,7 +223,7 @@ vsyslog(pri, fmt, ap)
 	prlen = snprintf(p, tbuf_left, "<%d>", pri);
 	DEC();
 
-	prlen = strftime(p, tbuf_left, "%h %e %T ", localtime(&now));
+	prlen = strftime(p, tbuf_left, "%h %e %T ", localtime_r(&now, &tm));
 	DEC();
 
 	if (_sl_LogStat & LOG_PERROR) stdp = p;
