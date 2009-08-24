@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2004-2007 Apple Inc. All rights reserved.
+ * Copyright (c) 2004-2008 Apple Inc. All rights reserved.
  *
  * @APPLE_LICENSE_HEADER_START@
  * 
@@ -32,9 +32,11 @@
 #include <syslog.h>
 #include <errno.h>
 #include <time.h>
+#include <sys/time.h>
 #include <crt_externs.h>
 #include <asl.h>
 #include <asl_private.h>
+#include <asl_store.h>
 #include <regex.h>
 #include <notify.h>
 #include <mach/mach.h>
@@ -46,10 +48,12 @@
 #include <pthread.h>
 #include <asl_ipc.h>
 
-#define ASL_SERVICE_NAME "com.apple.system.logger"
-
 #define streq(A, B) (strcmp(A, B) == 0)
 #define strcaseeq(A, B) (strcasecmp(A, B) == 0)
+
+#ifndef ASL_QUERY_OP_FALSE
+#define ASL_QUERY_OP_FALSE 0
+#endif
 
 #define forever for(;;)
 
@@ -70,10 +74,6 @@
 #define TFMT_UTC 1
 #define TFMT_LCL 2
 
-#define ENCODE_NONE 0
-#define ENCODE_VIS 1
-#define ENCODE_ASL 2
-
 #define XML_TAG_KEY 0
 #define XML_TAG_STRING 1
 #define XML_TAG_DATA 2
@@ -89,9 +89,11 @@ __private_extern__ asl_client_t *_asl_open_default();
 uint32_t notify_register_plain(const char *name, int *out_token);
 
 /* from asl_util.c */
-int _asl_server_socket(int *sock, struct sockaddr_un *server);
 int asl_is_utf8(const char *str);
 uint8_t *asl_b64_encode(const uint8_t *buf, size_t len);
+
+/* fork handling in syslog.c */
+extern void _syslog_fork_child();
 
 /* character encoding lengths */
 static const uint8_t char_encode_len[128] =
@@ -107,32 +109,51 @@ static const char *cvis_7_13 = "abtnvfr";
 typedef struct
 {
 	int notify_count;
+	int rc_change_token;
 	int notify_token;
 	int master_token;
+	uint64_t proc_filter;
+	uint64_t master_filter;
+	int port_count;
+	mach_port_t server_port;
 	char *sender;
 	pthread_mutex_t lock;
+	pthread_mutex_t port_lock;
 	asl_client_t *asl;
 } _asl_global_t;
 
 #ifndef BUILDING_VARIANT
-__private_extern__ _asl_global_t _asl_global = {0, -1, -1, NULL, PTHREAD_MUTEX_INITIALIZER, NULL};
+__private_extern__ _asl_global_t _asl_global = {0, -1, -1, -1, 0LL, 0LL, 0, MACH_PORT_NULL, NULL, PTHREAD_MUTEX_INITIALIZER, PTHREAD_MUTEX_INITIALIZER, NULL};
 
-static mach_port_t asl_server_port = MACH_PORT_NULL;
+#define ASL_SERVICE_NAME "com.apple.system.logger"
 
-static int
-_asl_connect(asl_client_t *asl)
+/*
+ * Called from the child process inside fork() to clean up
+ * inherited state from the parent process.
+ *
+ * NB. A lock isn't required, since we're single threaded in this call.
+ */
+__private_extern__ void
+_asl_fork_child()
 {
-	if (asl->sock >= 0) return 0;
+	_asl_global.notify_count = 0;
+	_asl_global.rc_change_token = -1;
+	_asl_global.master_token = -1;
+	_asl_global.notify_token = -1;
 
-	return _asl_server_socket(&asl->sock, &asl->server);
+	_asl_global.port_count = 0;
+	_asl_global.server_port = MACH_PORT_NULL;
+
+	/* clean up in syslog.c */
+	_syslog_fork_child();
 }
 
 static int
 _asl_notify_open(int do_lock)
 {
 	char *notify_name;
-	const char *prefix;
 	uint32_t status;
+	uint32_t euid;
 
 	if (do_lock != 0) pthread_mutex_lock(&_asl_global.lock);
 
@@ -144,10 +165,11 @@ _asl_notify_open(int do_lock)
 		return 0;
 	}
 
-	notify_name = NULL;
-
-	prefix = NOTIFY_PREFIX_USER;
-	if (getuid() == 0) prefix = NOTIFY_PREFIX_SYSTEM;
+	if (_asl_global.rc_change_token == -1)
+	{
+		status = notify_register_check(NOTIFY_RC, &_asl_global.rc_change_token);
+		if (status != NOTIFY_STATUS_OK) _asl_global.rc_change_token = -1;
+	}
 
 	if (_asl_global.master_token == -1)
 	{
@@ -155,7 +177,10 @@ _asl_notify_open(int do_lock)
 		if (status != NOTIFY_STATUS_OK) _asl_global.master_token = -1;
 	}
 
-	asprintf(&notify_name, "%s.%d", prefix, getpid());
+	euid = geteuid();
+	notify_name = NULL;
+	if (euid == 0) asprintf(&notify_name, "%s.%d", NOTIFY_PREFIX_SYSTEM, getpid());
+	else asprintf(&notify_name, "user.uid.%d.syslog.%d", euid, getpid());
 
 	if (notify_name != NULL)
 	{
@@ -183,6 +208,9 @@ _asl_notify_close()
 		return;
 	}
 
+	if (_asl_global.rc_change_token > 0) notify_cancel(_asl_global.rc_change_token);
+	_asl_global.rc_change_token = -1;
+
 	if (_asl_global.master_token > 0) notify_cancel(_asl_global.master_token);
 	_asl_global.master_token = -1;
 
@@ -197,6 +225,7 @@ asl_open(const char *ident, const char *facility, uint32_t opts)
 {
 	char *name, *x;
 	asl_client_t *asl;
+	kern_return_t kstatus;
 
 	asl = (asl_client_t *)calloc(1, sizeof(asl_client_t));
 	if (asl == NULL)
@@ -209,14 +238,22 @@ asl_open(const char *ident, const char *facility, uint32_t opts)
 
 	asl->sock = -1;
 
-	if (asl->options & ASL_OPT_NO_DELAY)
+	pthread_mutex_lock(&(_asl_global.port_lock));
+
+	if (_asl_global.server_port == MACH_PORT_NULL) 
 	{
-		if (_asl_connect(asl) < 0)
-		{
-			free(asl);
-			return NULL;
-		}
+		_asl_global.port_count = 0;
+
+		kstatus = bootstrap_look_up(bootstrap_port, ASL_SERVICE_NAME, &_asl_global.server_port);
+		if (kstatus == KERN_SUCCESS) _asl_global.port_count = 1;
+		else _asl_global.server_port = MACH_PORT_NULL;
 	}
+	else
+	{
+		_asl_global.port_count++;
+	}
+
+	pthread_mutex_unlock(&(_asl_global.port_lock));
 
 	asl->pid = getpid();
 	asl->uid = getuid();
@@ -229,7 +266,7 @@ asl_open(const char *ident, const char *facility, uint32_t opts)
 		asl->name = strdup(ident);
 		if (asl->name == NULL)
 		{
-			close(asl->sock);
+			if (asl->sock >= 0) close(asl->sock);
 			free(asl);
 			return NULL;
 		}
@@ -245,7 +282,7 @@ asl_open(const char *ident, const char *facility, uint32_t opts)
 			asl->name = strdup(x);
 			if (asl->name == NULL)
 			{
-				close(asl->sock);
+				if (asl->sock >= 0) close(asl->sock);
 				free(asl);
 				return NULL;
 			}
@@ -257,14 +294,14 @@ asl_open(const char *ident, const char *facility, uint32_t opts)
 	else asl->facility = strdup(asl_syslog_faciliy_num_to_name(LOG_USER));
 	if (asl->facility == NULL)
 	{
-		close(asl->sock);
+		if (asl->sock >= 0) close(asl->sock);
 		free(asl);
 		return NULL;
 	}
 
 	if (!(asl->options & ASL_OPT_NO_REMOTE)) _asl_notify_open(1);
 
-	if (asl->options & ASL_OPT_STDERR) asl_add_output((aslclient)asl, fileno(stderr), ASL_MSG_FMT_STD, ASL_TIME_FMT_LCL);
+	if (asl->options & ASL_OPT_STDERR) asl_add_output((aslclient)asl, fileno(stderr), ASL_MSG_FMT_STD, ASL_TIME_FMT_LCL, ASL_ENCODE_SAFE);
 
 	return (aslclient)asl;
 }
@@ -279,6 +316,18 @@ asl_close(aslclient ac)
 	if (asl == NULL) return;
 
 	if (asl->sock >= 0) close(asl->sock);
+
+	pthread_mutex_lock(&(_asl_global.port_lock));
+
+	if (_asl_global.port_count > 0) _asl_global.port_count--;
+	if (_asl_global.port_count == 0)
+	{
+		mach_port_deallocate(mach_task_self(), _asl_global.server_port);
+		_asl_global.server_port = MACH_PORT_NULL;
+	}
+
+	pthread_mutex_unlock(&(_asl_global.port_lock));
+
 	if (asl->name != NULL) free(asl->name);
 	if (asl->facility != NULL) free(asl->facility);
 	if (!(asl->options & ASL_OPT_NO_REMOTE)) _asl_notify_close();
@@ -296,6 +345,8 @@ asl_close(aslclient ac)
 		free(asl->fd_tfmt);
 	}
 
+	if (asl->fd_encoding != NULL) free(asl->fd_encoding);
+
 	memset(asl, 0, sizeof(asl_client_t));
 	free(asl);
 }
@@ -303,6 +354,8 @@ asl_close(aslclient ac)
 __private_extern__ asl_client_t *
 _asl_open_default()
 {
+	if (_asl_global.asl != NULL) return _asl_global.asl;
+
 	pthread_mutex_lock(&_asl_global.lock);
 	if (_asl_global.asl != NULL)
 	{
@@ -409,8 +462,8 @@ _asl_encode_char(char **m, uint32_t *x, uint32_t c, uint32_t encode, uint32_t en
 		return;
 	}
 
-	/* [ and ] ane escaped in ASL encoding */
-	if ((encode == ENCODE_ASL) && (meta == 0) && ((c == 91) || (c == 93)))
+	/* [ and ] are escaped in ASL encoding */
+	if ((encode == ASL_ENCODE_ASL) && (meta == 0) && ((c == 91) || (c == 93)))
 	{
 		*p++ = '\\';
 		*p++ = c;
@@ -484,13 +537,16 @@ _asl_append_string(char **m, uint32_t *x, const char *s, uint32_t encode, uint32
 {
 	uint32_t i, n, spextra;
 	uint8_t c;
+	char *p;
 
 	if (m == NULL) return;
 	if (x == NULL) return;
 	if (s == NULL) return;
 
-	if (encode == ENCODE_NONE)
+	if (encode == ASL_ENCODE_NONE)
 	{
+		/* no encoding - just allocate enough space and copy the string */
+
 		n = strlen(s);
 		if (n == 0) return;
 
@@ -511,6 +567,66 @@ _asl_append_string(char **m, uint32_t *x, const char *s, uint32_t encode, uint32
 
 		return;
 	}
+	else if (encode == ASL_ENCODE_SAFE)
+	{
+		/*
+		 * Minor encoding to reduce the likelyhood of spoof attacks.
+		 *
+		 * - append a tab after newlines
+		 * - translate \r to newline & append a tab
+		 * - map backspace to ^H
+		 *
+		 * Note that there may be UTF-8 characters that could be used in a spoof
+		 * attack that we don't check.  Caveat Reador.
+		 */
+		n = 0;
+		for (i = 0; s[i] != '\0'; i++)
+		{
+			n++;
+			c = s[i];
+			if ((c == 10) || (c == 13) || (c == 8)) n++;
+		}
+
+		if (n == 0) return;
+
+		if (*m == NULL)
+		{
+			*m = malloc(n + 1);
+			*x = 1;
+		}
+		else
+		{
+			*m = reallocf(*m, n + (*x));
+		}
+
+		if (*m == NULL) return;
+
+		p = *m + *x - 1;
+
+		for (i = 0; s[i] != '\0'; i++)
+		{
+			c = s[i];
+			if ((c == 10) || (c == 13))
+			{
+				*p++ = '\n';
+				*p++ = '\t';
+				*x = *x + 2;
+			}
+			else if (c == 8)
+			{
+				*p++ = '^';
+				*p++ = 'H';
+				*x = *x + 2;
+			}
+			else
+			{
+				*p++ = c;
+				*x = *x + 1;
+			}
+		}
+
+		return;
+	}
 
 	spextra = 0;
 
@@ -527,7 +643,7 @@ _asl_append_string(char **m, uint32_t *x, const char *s, uint32_t encode, uint32
 		}
 		else if ((c == 91) || (c == 93))
 		{
-			if (encode == ENCODE_ASL) n += 2;
+			if (encode == ASL_ENCODE_ASL) n += 2;
 			else n += 1;
 		}
 		else
@@ -679,30 +795,30 @@ _asl_append_xml_tag(char **m, uint32_t *x, int tag, char *s)
 
 	if (tag == XML_TAG_KEY)
 	{
-		_asl_append_string(m, x, "\t\t<key>", ENCODE_NONE, 0);
+		_asl_append_string(m, x, "\t\t<key>", ASL_ENCODE_NONE, 0);
 		_asl_append_xml_string(m, x, s);
-		_asl_append_string(m, x, "</key>\n", ENCODE_NONE, 0);
+		_asl_append_string(m, x, "</key>\n", ASL_ENCODE_NONE, 0);
 		return;
 	}
 
 	if (tag == XML_TAG_STRING)
 	{
-		_asl_append_string(m, x, "\t\t<string>", ENCODE_NONE, 0);
+		_asl_append_string(m, x, "\t\t<string>", ASL_ENCODE_NONE, 0);
 		_asl_append_xml_string(m, x, s);
-		_asl_append_string(m, x, "</string>\n", ENCODE_NONE, 0);
+		_asl_append_string(m, x, "</string>\n", ASL_ENCODE_NONE, 0);
 		return;
 	}
 
 	if (tag == XML_TAG_DATA)
 	{
-		_asl_append_string(m, x, "\t\t<data>", ENCODE_NONE, 0);
+		_asl_append_string(m, x, "\t\t<data>", ASL_ENCODE_NONE, 0);
 		b64 = (char *)asl_b64_encode((uint8_t *)s, strlen(s));
 		if (b64 != NULL)
 		{
-			_asl_append_string(m, x, b64, ENCODE_NONE, 0);
+			_asl_append_string(m, x, b64, ASL_ENCODE_NONE, 0);
 			free(b64);
 		}
-		_asl_append_string(m, x, "</data>\n", ENCODE_NONE, 0);
+		_asl_append_string(m, x, "</data>\n", ASL_ENCODE_NONE, 0);
 		return;
 	}
 }
@@ -716,7 +832,7 @@ _asl_append_op(char **m, uint32_t *x, uint32_t op)
 	if (m == NULL) return;
 	if (x == NULL) return;
 
-	if (op == ASL_QUERY_OP_NULL) return _asl_append_string(m, x, ".", ENCODE_NONE, 0);
+	if (op == ASL_QUERY_OP_NULL) return _asl_append_string(m, x, ".", ASL_ENCODE_NONE, 0);
 
 	i = 0;
 	if (op & ASL_QUERY_OP_CASEFOLD) opstr[i++] = 'C';
@@ -761,10 +877,10 @@ _asl_append_op(char **m, uint32_t *x, uint32_t op)
 			break;
 	}
 
-	if (i == 0) return _asl_append_string(m, x, ".", ENCODE_NONE, 0);
+	if (i == 0) return _asl_append_string(m, x, ".", ASL_ENCODE_NONE, 0);
 
 	opstr[i++] = '\0';
-	return _asl_append_string(m, x, opstr, ENCODE_NONE, 0);
+	return _asl_append_string(m, x, opstr, ASL_ENCODE_NONE, 0);
 }
 
 static char *
@@ -829,30 +945,30 @@ _asl_msg_to_string_time_fmt(asl_msg_t *msg, uint32_t *len, int tf)
 	for (i = 0; i < msg->count; i++)
 	{
 		if (msg->key[i] == NULL) continue;
-		if (i > 0) _asl_append_string(&out, &outlen, " [", ENCODE_NONE, 0);
-		else _asl_append_string(&out, &outlen, "[", ENCODE_NONE, 0);
+		if (i > 0) _asl_append_string(&out, &outlen, " [", ASL_ENCODE_NONE, 0);
+		else _asl_append_string(&out, &outlen, "[", ASL_ENCODE_NONE, 0);
 
-		_asl_append_string(&out, &outlen, msg->key[i], ENCODE_ASL, 1);
+		_asl_append_string(&out, &outlen, msg->key[i], ASL_ENCODE_ASL, 1);
 
 		if ((tf != TFMT_SEC) && (!strcmp(msg->key[i], ASL_KEY_TIME)))
 		{
 			s = _asl_time_string(tf, msg->val[i]);
 			if (s != NULL)
 			{
-				_asl_append_string(&out, &outlen, " ", ENCODE_NONE, 0);
-				_asl_append_string(&out, &outlen, s, ENCODE_ASL, 0);
+				_asl_append_string(&out, &outlen, " ", ASL_ENCODE_NONE, 0);
+				_asl_append_string(&out, &outlen, s, ASL_ENCODE_ASL, 0);
 			}
 		}
 		else if (msg->val[i] != NULL)
 		{
-			_asl_append_string(&out, &outlen, " ", ENCODE_NONE, 0);
-			_asl_append_string(&out, &outlen, msg->val[i], ENCODE_ASL, 0);
+			_asl_append_string(&out, &outlen, " ", ASL_ENCODE_NONE, 0);
+			_asl_append_string(&out, &outlen, msg->val[i], ASL_ENCODE_ASL, 0);
 		}
 
-		_asl_append_string(&out, &outlen, "]", ENCODE_NONE, 0);
+		_asl_append_string(&out, &outlen, "]", ASL_ENCODE_NONE, 0);
 	}
 
-	_asl_append_string(&out, &outlen, "\n", ENCODE_NONE, 0);
+	_asl_append_string(&out, &outlen, "\n", ASL_ENCODE_NONE, 0);
 
 	*len = outlen;
 	return out;
@@ -874,7 +990,7 @@ asl_msg_to_string(asl_msg_t *msg, uint32_t *len)
 
 	if (msg->type == ASL_TYPE_QUERY)
 	{
-		_asl_append_string(&out, &outlen, "Q ", ENCODE_NONE, 0);
+		_asl_append_string(&out, &outlen, "Q ", ASL_ENCODE_NONE, 0);
 		if (out == NULL) return NULL;
 	}
 
@@ -889,24 +1005,24 @@ asl_msg_to_string(asl_msg_t *msg, uint32_t *len)
 	{
 		if (msg->key[i] == NULL) continue;
 
-		if (i > 0) _asl_append_string(&out, &outlen, " [", ENCODE_NONE, 0);
-		else _asl_append_string(&out, &outlen, "[", ENCODE_NONE, 0);
+		if (i > 0) _asl_append_string(&out, &outlen, " [", ASL_ENCODE_NONE, 0);
+		else _asl_append_string(&out, &outlen, "[", ASL_ENCODE_NONE, 0);
 
 		if (msg->type == ASL_TYPE_QUERY)
 		{
 			_asl_append_op(&out, &outlen, msg->op[i]);
-			_asl_append_string(&out, &outlen, " ", ENCODE_NONE, 0);
+			_asl_append_string(&out, &outlen, " ", ASL_ENCODE_NONE, 0);
 		}
 
-		_asl_append_string(&out, &outlen, msg->key[i], ENCODE_ASL, 1);
+		_asl_append_string(&out, &outlen, msg->key[i], ASL_ENCODE_ASL, 1);
 
 		if (msg->val[i] != NULL)
 		{
-			_asl_append_string(&out, &outlen, " ", ENCODE_NONE, 0);
-			_asl_append_string(&out, &outlen, msg->val[i], ENCODE_ASL, 0);
+			_asl_append_string(&out, &outlen, " ", ASL_ENCODE_NONE, 0);
+			_asl_append_string(&out, &outlen, msg->val[i], ASL_ENCODE_ASL, 0);
 		}
 
-		_asl_append_string(&out, &outlen, "]", ENCODE_NONE, 0);
+		_asl_append_string(&out, &outlen, "]", ASL_ENCODE_NONE, 0);
 	}
 
 	*len = outlen;
@@ -1440,7 +1556,7 @@ _asl_isanumber(char *s)
 }
 
 static int
-_asl_msg_op_test(uint32_t op, char *q, char *m, uint32_t n)
+_asl_msg_basic_test(uint32_t op, char *q, char *m, uint32_t n)
 {
 	int cmp;
 	uint32_t t;
@@ -1449,23 +1565,33 @@ _asl_msg_op_test(uint32_t op, char *q, char *m, uint32_t n)
 
 	t = op & ASL_QUERY_OP_TRUE;
 
+	/* NULL value from query or message string fails */
+	if ((q == NULL) || (m == NULL)) return (t & ASL_QUERY_OP_NOT_EQUAL);
+
 	if (op & ASL_QUERY_OP_REGEX)
 	{
+		/* greater than or less than make no sense in substring search */
+		if ((t == ASL_QUERY_OP_GREATER) || (t == ASL_QUERY_OP_LESS)) return 0;
+
 		memset(&rex, 0, sizeof(regex_t));
 
 		rflags = REG_EXTENDED | REG_NOSUB;
 		if (op & ASL_QUERY_OP_CASEFOLD) rflags |= REG_ICASE;
 
-		if (regcomp(&rex, q, rflags) != 0) return 0;
+		/* A bad reqular expression matches nothing */
+		if (regcomp(&rex, q, rflags) != 0) return (t & ASL_QUERY_OP_NOT_EQUAL);
+
 		cmp = regexec(&rex, m, 0, NULL, 0);
 		regfree(&rex);
+
+		if (t == ASL_QUERY_OP_NOT_EQUAL) return (cmp != 0);
 		return (cmp == 0);
 	}
 
 	if (op & ASL_QUERY_OP_NUMERIC)
 	{
-		/* We assume the query contains a numeric string */
-		if (_asl_isanumber(m) == 0) return 0;
+		if (_asl_isanumber(q) == 0) return (t == ASL_QUERY_OP_NOT_EQUAL);
+		if (_asl_isanumber(m) == 0) return (t == ASL_QUERY_OP_NOT_EQUAL);
 
 		nq = atoi(q);
 		nm = atoi(m);
@@ -1478,7 +1604,7 @@ _asl_msg_op_test(uint32_t op, char *q, char *m, uint32_t n)
 			case ASL_QUERY_OP_LESS: return (nm < nq);
 			case ASL_QUERY_OP_LESS_EQUAL: return (nm <= nq);
 			case ASL_QUERY_OP_NOT_EQUAL: return (nm != nq);
-			default: return 0;
+			default: return (t == ASL_QUERY_OP_NOT_EQUAL);
 		}
 	}
 
@@ -1502,60 +1628,112 @@ _asl_msg_op_test(uint32_t op, char *q, char *m, uint32_t n)
 		case ASL_QUERY_OP_LESS: return (cmp < 0);
 		case ASL_QUERY_OP_LESS_EQUAL: return (cmp <= 0);
 		case ASL_QUERY_OP_NOT_EQUAL: return (cmp != 0);
-		default: return 0;
 	}
 
-	return 0;
+	return (t == ASL_QUERY_OP_NOT_EQUAL);
 }
 
 static int
-_asl_msg_test_op_substr(uint32_t op, char *q, char *m)
+_asl_msg_test_substring(uint32_t op, char *q, char *m)
 {
-	uint32_t i, d, lm, lq;
+	uint32_t t, i, d, lm, lq, match, newop;
 
-	lm = strlen(m);
-	lq = strlen(q);
+	t = op & ASL_QUERY_OP_TRUE;
 
-	if (lq > lm) return 0;
+	lm = 0;
+	if (m != NULL) lm = strlen(m);
 
+	lq = 0;
+	if (q != NULL) lq = strlen(q);
+
+	/* NULL is a substring of any string */
+	if (lq == 0) return (t & ASL_QUERY_OP_EQUAL);
+
+	/* A long string is defined to be not equal to a short string */
+	if (lq > lm) return (t == ASL_QUERY_OP_NOT_EQUAL);
+
+	/* greater than or less than make no sense in substring search */
+	if ((t == ASL_QUERY_OP_GREATER) || (t == ASL_QUERY_OP_LESS)) return 0;
+
+	/*
+	 * We scan the string doing an equality test.
+	 * If the input test is equality, we stop as soon as we hit a match.
+	 * Otherwise we keep scanning the whole message string.
+	 */
+	newop = op & 0xff0;
+	newop |= ASL_QUERY_OP_EQUAL;
+
+	match = 0;
 	d = lm - lq;
 	for (i = 0; i <= d; i++)
 	{
-		if (_asl_msg_op_test(op, q, m + i, lq) != 0) return 1;
+		if (_asl_msg_basic_test(newop, q, m + i, lq) != 0)
+		{
+			if (t & ASL_QUERY_OP_EQUAL) return 1;
+			match++;
+		}
 	}
 
-	return 0;
+	/* If the input test was for equality, no matches were found */
+	if (t & ASL_QUERY_OP_EQUAL) return 0;
+
+	/* The input test was for not equal.  Return true if no matches were found */
+	return (match == 0);
 }
 
 static int
-_asl_msg_test_op_prefix(uint32_t op, char *q, char *m)
+_asl_msg_test_prefix(uint32_t op, char *q, char *m)
 {
-	uint32_t lm, lq;
+	uint32_t lm, lq, t;
 
-	lm = strlen(m);
-	lq = strlen(q);
+	t = op & ASL_QUERY_OP_TRUE;
 
-	if (lq > lm) return 0;
+	lm = 0;
+	if (m != NULL) lm = strlen(m);
 
-	return _asl_msg_op_test(op, q, m, lq);
+	lq = 0;
+	if (q != NULL) lq = strlen(q);
+
+	/* NULL is a prefix of any string */
+	if (lq == 0) return (t & ASL_QUERY_OP_EQUAL);
+
+	/* A long string is defined to be not equal to a short string */
+	if (lq > lm) return (t == ASL_QUERY_OP_NOT_EQUAL);
+
+	/* Compare two equal-length strings */
+	return _asl_msg_basic_test(op, q, m, lq);
 }
 
 static int
-_asl_msg_test_op_suffix(uint32_t op, char *q, char *m)
+_asl_msg_test_suffix(uint32_t op, char *q, char *m)
 {
-	uint32_t lm, lq, d;
+	uint32_t lm, lq, d, t;
 
-	lm = strlen(m);
-	lq = strlen(q);
+	t = op & ASL_QUERY_OP_TRUE;
 
-	if (lq > lm) return 0;
+	lm = 0;
+	if (m != NULL) lm = strlen(m);
 
+	lq = 0;
+	if (q != NULL) lq = strlen(q);
+
+	/* NULL is a suffix of any string */
+	if (lq == 0) return (t & ASL_QUERY_OP_EQUAL);
+
+	/* A long string is defined to be not equal to a short string */
+	if (lq > lm) return (t == ASL_QUERY_OP_NOT_EQUAL);
+
+	/* Compare two equal-length strings */
 	d = lm - lq;
-	return _asl_msg_op_test(op, q, m + d, lq);
+	return _asl_msg_basic_test(op, q, m + d, lq);
 }
 
+/* 
+ * Splits out prefix, suffix, and substring tests.
+ * Sends the rest to _asl_msg_basic_test().
+ */
 static int
-_asl_msg_test_op(uint32_t op, char *q, char *m)
+_asl_msg_test_expression(uint32_t op, char *q, char *m)
 {
 	uint32_t t;
 
@@ -1564,116 +1742,132 @@ _asl_msg_test_op(uint32_t op, char *q, char *m)
 
 	if (op & ASL_QUERY_OP_PREFIX)
 	{
-		if (op & ASL_QUERY_OP_SUFFIX) return _asl_msg_test_op_substr(op, q, m);
-		return _asl_msg_test_op_prefix(op, q, m);
+		if (op & ASL_QUERY_OP_SUFFIX) return _asl_msg_test_substring(op, q, m);
+		return _asl_msg_test_prefix(op, q, m);
 	}
-	if (op & ASL_QUERY_OP_SUFFIX) return _asl_msg_test_op_suffix(op, q, m);
+	if (op & ASL_QUERY_OP_SUFFIX) return _asl_msg_test_suffix(op, q, m);
 
-	return _asl_msg_op_test(op, q, m, 0);
+	return _asl_msg_basic_test(op, q, m, 0);
 }
 
+/*
+ * Special case for comparing time values.
+ * If both inputs are time strings, this compares the time
+ * value in seconds.  Otherwise it just does normal matching.
+ */
 static int
-_asl_msg_test_time_op(uint32_t op, char *q, char *m)
+_asl_msg_test_time_expression(uint32_t op, char *q, char *m)
 {
 	time_t tq, tm;
-	char *vq, *vm;
-	struct tm gtime;
-	uint32_t t, do_numeric;
-	int cmp;
+	uint32_t t;
 
-	do_numeric = 1;
-
-	if ((op & ASL_QUERY_OP_PREFIX) || (op & ASL_QUERY_OP_SUFFIX) || (op & ASL_QUERY_OP_REGEX) || (op & ASL_QUERY_OP_CASEFOLD)) do_numeric = 0;
+	if ((op & ASL_QUERY_OP_PREFIX) || (op & ASL_QUERY_OP_SUFFIX) || (op & ASL_QUERY_OP_REGEX)) return _asl_msg_test_expression(op, q, m);
+	if ((q == NULL) || (m == NULL)) return _asl_msg_test_expression(op, q, m);
 
 	tq = asl_parse_time(q);
-	if (tq < 0) return _asl_msg_test_op(op, q, m);
+	if (tq < 0) return _asl_msg_test_expression(op, q, m);
 
 	tm = asl_parse_time(m);
-	if (tm < 0) return _asl_msg_test_op(op, q, m);
+	if (tm < 0) return _asl_msg_test_expression(op, q, m);
 
-	if (do_numeric == 1)
+	t = op & ASL_QUERY_OP_TRUE;
+
+	switch (t)
 	{
-		t = op & ASL_QUERY_OP_TRUE;
-		switch (t)
+		case ASL_QUERY_OP_FALSE:
 		{
-			case ASL_QUERY_OP_EQUAL:
-				if (tm == tq) return 1;
-				return 0;
-			case ASL_QUERY_OP_GREATER:
-				if (tm > tq) return 1;
-				return 0;
-			case ASL_QUERY_OP_GREATER_EQUAL:
-				if (tm >= tq) return 1;
-				return 0;
-			case ASL_QUERY_OP_LESS:
-				if (tm < tq) return 1;
-				return 0;
-			case ASL_QUERY_OP_LESS_EQUAL:
-				if (tm <= tq) return 1;
-				return 0;
-			case ASL_QUERY_OP_NOT_EQUAL:
-				if (tm != tq) return 1;
-				return 0;
-			default:
-				return 0;
+			return 0;
 		}
-
-		return 0;
+		case ASL_QUERY_OP_EQUAL:
+		{
+			if (tm == tq) return 1;
+			return 0;
+		}
+		case ASL_QUERY_OP_GREATER:
+		{
+			if (tm > tq) return 1;
+			return 0;
+		}
+		case ASL_QUERY_OP_GREATER_EQUAL:
+		{
+			if (tm >= tq) return 1;
+			return 0;
+		}
+		case ASL_QUERY_OP_LESS:
+		{
+			if (tm < tq) return 1;
+			return 0;
+		}
+		case ASL_QUERY_OP_LESS_EQUAL:
+		{
+			if (tm <= tq) return 1;
+			return 0;
+		}
+		case ASL_QUERY_OP_NOT_EQUAL:
+		{
+			if (tm != tq) return 1;
+			return 0;
+		}
+		case ASL_QUERY_OP_TRUE:
+		{
+			return 1;
+		}
 	}
 
-	memset(&gtime, 0, sizeof(struct tm));
-	gmtime_r(&tq, &gtime);
-
-	/* Canonical form: YYYY.MM.DD hh:mm:ss UTC */
-	vq = NULL;
-	asprintf(&vq, "%d.%02d.%02d %02d:%02d:%02d UTC", gtime.tm_year + 1900, gtime.tm_mon + 1, gtime.tm_mday, gtime.tm_hour, gtime.tm_min, gtime.tm_sec);
-	if (vq == NULL) return 0;
-
-	memset(&gtime, 0, sizeof(struct tm));
-	gmtime_r(&tm, &gtime);
-
-	/* Canonical form: YYYY.MM.DD hh:mm:ss UTC */
-	vm = NULL;
-	asprintf(&vm, "%d.%02d.%02d %02d:%02d:%02d UTC", gtime.tm_year + 1900, gtime.tm_mon + 1, gtime.tm_mday, gtime.tm_hour, gtime.tm_min, gtime.tm_sec);
-	if (vm == NULL) return 0;
-
-	cmp = _asl_msg_test_op(op, q, m);
-
-	free(vq);
-	free(vm);
-
-	return cmp;
+	/* NOTREACHED */
+	return 0;
 }
 
+/* test a query against a message */
 static int
 _asl_msg_test(asl_msg_t *q, asl_msg_t *m)
 {
-	uint32_t i, j;
+	uint32_t i, j, t;
 	int cmp;
-	char *val;
 
+	/*
+	 * Check each simple expression (key op val) separately.
+	 * The query suceeds (returns 1) if all simple expressions
+	 * succeed (i.e. AND the simple expressions).
+	 */
 	for (i = 0; i < q->count; i++)
 	{
+		/* Find query key[i] in the message */
 		j = _asl_msg_index(m, q->key[i]);
-		if (j == (uint32_t)-1) return 0;
 
-		if (q->val[i] == NULL) continue;
+		/* NULL op is meaningless, but we allow it to succeed */
 		if (q->op == NULL) continue;
 
-		if ((q->op[i] & ASL_QUERY_OP_TRUE) == ASL_QUERY_OP_TRUE) continue;
+		/* ASL_QUERY_OP_TRUE tests if key[i] is present in the message */
+		t = q->op[i] & ASL_QUERY_OP_TRUE;
+		if (t == ASL_QUERY_OP_TRUE)
+		{
+			if (j == (uint32_t)-1) return 0;
+			continue;
+		}
 
-		if (m->val[j] == NULL) return 0;
+		/* ASL_QUERY_OP_FALSE tests if the key is NOT present in the message */
+		if (t == ASL_QUERY_OP_FALSE)
+		{
+			if (j != (uint32_t)-1) return 0;
+			continue;
+		}
 
-		val = q->val[i];
+		if (j == (uint32_t)-1)
+		{
+			/* the message does NOT have query key[i] - fail unless we are testing not equal */
+			if (t == ASL_QUERY_OP_NOT_EQUAL) continue;
+			return 0;
+		}
 
 		cmp = 1;
 		if (streq(q->key[i], ASL_KEY_TIME))
 		{
-			cmp = _asl_msg_test_time_op(q->op[i], q->val[i], m->val[j]);
+			cmp = _asl_msg_test_time_expression(q->op[i], q->val[i], m->val[j]);
 		}
 		else
 		{
-			cmp = _asl_msg_test_op(q->op[i], val, m->val[j]);
+			cmp = _asl_msg_test_expression(q->op[i], q->val[i], m->val[j]);
 		}
 
 		if (cmp == 0) return 0;
@@ -1698,7 +1892,7 @@ asl_msg_cmp(asl_msg_t *a, asl_msg_t *b)
  * Log messages will be written to this file as well as to the server.
  */
 int
-asl_add_output(aslclient ac, int fd, const char *mfmt, const char *tfmt)
+asl_add_output(aslclient ac, int fd, const char *mfmt, const char *tfmt, uint32_t text_encoding)
 {
 	uint32_t i;
 	int use_global_lock;
@@ -1718,7 +1912,7 @@ asl_add_output(aslclient ac, int fd, const char *mfmt, const char *tfmt)
 	{
 		if (asl->fd_list[i] == fd)
 		{
-			/* update message format and time format */
+			/* update message format, time format, and text encoding */
 			if (asl->fd_mfmt[i] != NULL) free(asl->fd_mfmt[i]);
 			asl->fd_mfmt[i] = NULL;
 			if (mfmt != NULL) asl->fd_mfmt[i] = strdup(mfmt);
@@ -1726,6 +1920,8 @@ asl_add_output(aslclient ac, int fd, const char *mfmt, const char *tfmt)
 			if (asl->fd_tfmt[i] != NULL) free(asl->fd_tfmt[i]);
 			asl->fd_tfmt[i] = NULL;
 			if (tfmt != NULL) asl->fd_tfmt[i] = strdup(tfmt);
+
+			asl->fd_encoding[i] = text_encoding;
 
 			if (use_global_lock != 0) pthread_mutex_unlock(&_asl_global.lock);
 			return 0;
@@ -1737,19 +1933,22 @@ asl_add_output(aslclient ac, int fd, const char *mfmt, const char *tfmt)
 		asl->fd_list = (int *)calloc(1, sizeof(int));
 		asl->fd_mfmt = (char **)calloc(1, sizeof(char *));
 		asl->fd_tfmt = (char **)calloc(1, sizeof(char *));
+		asl->fd_encoding = (uint32_t *)calloc(1, sizeof(int));
 	}
 	else
 	{
 		asl->fd_list = (int *)reallocf(asl->fd_list, (1 + asl->fd_count) * sizeof(int));
 		asl->fd_mfmt = (char **)reallocf(asl->fd_mfmt, (1 + asl->fd_count) * sizeof(char *));
 		asl->fd_tfmt = (char **)reallocf(asl->fd_tfmt, (1 + asl->fd_count) * sizeof(char *));
+		asl->fd_encoding = (uint32_t *)reallocf(asl->fd_encoding, (1 + asl->fd_count) * sizeof(uint32_t));
 	}
 
-	if ((asl->fd_list == NULL) || (asl->fd_mfmt == NULL) || (asl->fd_tfmt == NULL))
+	if ((asl->fd_list == NULL) || (asl->fd_mfmt == NULL) || (asl->fd_tfmt == NULL) || (asl->fd_encoding == NULL))
 	{
 		if (asl->fd_list != NULL) free(asl->fd_list);
 		if (asl->fd_mfmt != NULL) free(asl->fd_mfmt);
 		if (asl->fd_tfmt != NULL) free(asl->fd_tfmt);
+		if (asl->fd_encoding != NULL) free(asl->fd_encoding);
 
 		if (use_global_lock != 0) pthread_mutex_unlock(&_asl_global.lock);
 		return -1;
@@ -1758,6 +1957,7 @@ asl_add_output(aslclient ac, int fd, const char *mfmt, const char *tfmt)
 	asl->fd_list[asl->fd_count] = fd;
 	if (mfmt != NULL) asl->fd_mfmt[asl->fd_count] = strdup(mfmt);
 	if (tfmt != NULL) asl->fd_tfmt[asl->fd_count] = strdup(tfmt);
+	asl->fd_encoding[asl->fd_count] = text_encoding;
 
 	asl->fd_count++;
 
@@ -1768,7 +1968,7 @@ asl_add_output(aslclient ac, int fd, const char *mfmt, const char *tfmt)
 int
 asl_add_log_file(aslclient ac, int fd)
 {
-	return asl_add_output(ac, fd, ASL_MSG_FMT_STD, ASL_TIME_FMT_LCL);
+	return asl_add_output(ac, fd, ASL_MSG_FMT_STD, ASL_TIME_FMT_LCL, ASL_ENCODE_SAFE);
 }
 
 /*
@@ -1821,6 +2021,7 @@ asl_remove_output(aslclient ac, int fd)
 		asl->fd_list[x] = asl->fd_list[i];
 		asl->fd_mfmt[x] = asl->fd_mfmt[i];
 		asl->fd_tfmt[x] = asl->fd_tfmt[i];
+		asl->fd_encoding[x] = asl->fd_encoding[i];
 	}
 
 	asl->fd_count--;
@@ -1829,16 +2030,24 @@ asl_remove_output(aslclient ac, int fd)
 	{
 		free(asl->fd_list);
 		asl->fd_list = NULL;
+
+		free(asl->fd_mfmt);
 		asl->fd_mfmt = NULL;
+
+		free(asl->fd_tfmt);
 		asl->fd_tfmt = NULL;
+
+		free(asl->fd_encoding);
+		asl->fd_encoding = NULL;
 	}
 	else
 	{
 		asl->fd_list = (int *)reallocf(asl->fd_list, asl->fd_count * sizeof(int));
 		asl->fd_mfmt = (char **)reallocf(asl->fd_mfmt, asl->fd_count * sizeof(char *));
 		asl->fd_tfmt = (char **)reallocf(asl->fd_tfmt, asl->fd_count * sizeof(char *));
+		asl->fd_encoding = (uint32_t *)reallocf(asl->fd_encoding, asl->fd_count * sizeof(uint32_t));
 
-		if ((asl->fd_list == NULL) || (asl->fd_mfmt == NULL) || (asl->fd_tfmt == NULL))
+		if ((asl->fd_list == NULL) || (asl->fd_mfmt == NULL) || (asl->fd_tfmt == NULL) || (asl->fd_encoding == NULL))
 		{
 			if (asl->fd_list != NULL)
 			{
@@ -1858,6 +2067,12 @@ asl_remove_output(aslclient ac, int fd)
 				for (i = 0; i < asl->fd_count; i++) if (asl->fd_tfmt[i] != NULL) free(asl->fd_tfmt[i]);
 				free(asl->fd_tfmt);
 				asl->fd_tfmt = NULL;
+			}
+
+			if (asl->fd_encoding != NULL)
+			{
+				free(asl->fd_encoding);
+				asl->fd_encoding = NULL;
 			}
 
 			asl->fd_count = 0;
@@ -2246,7 +2461,7 @@ _asl_level_string(int level)
  * out parameter len returns string length including trailing NUL
  */
 char *
-asl_format_message(aslmsg msg, const char *mfmt, const char *tfmt, uint32_t *len)
+asl_format_message(aslmsg msg, const char *mfmt, const char *tfmt, uint32_t text_encoding, uint32_t *len)
 {
 	char *out, *tstr, *k, c[2];
 	const char *hstr, *sstr, *pstr, *mstr, *lstr, *rprc, *rpid, *v;
@@ -2284,8 +2499,8 @@ asl_format_message(aslmsg msg, const char *mfmt, const char *tfmt, uint32_t *len
 		mstr = asl_get(msg, ASL_KEY_MSG);
 		if (mstr == NULL) return NULL;
 
-		_asl_append_string(&out, len, mstr, ENCODE_VIS, 0);
-		_asl_append_string(&out, len, "\n", ENCODE_NONE, 0);
+		_asl_append_string(&out, len, mstr, text_encoding, 0);
+		_asl_append_string(&out, len, "\n", ASL_ENCODE_NONE, 0);
 
 		return out;
 	}
@@ -2318,61 +2533,61 @@ asl_format_message(aslmsg msg, const char *mfmt, const char *tfmt, uint32_t *len
 
 		if (tstr == NULL)
 		{
-			_asl_append_string(&out, len, "0", ENCODE_NONE, 0);
+			_asl_append_string(&out, len, "0", ASL_ENCODE_NONE, 0);
 		}
 		else
 		{
-			_asl_append_string(&out, len, tstr, ENCODE_NONE, 0);
+			_asl_append_string(&out, len, tstr, ASL_ENCODE_NONE, 0);
 			free(tstr);
 		}
 
-		_asl_append_string(&out, len, " ", ENCODE_NONE, 0);
+		_asl_append_string(&out, len, " ", ASL_ENCODE_NONE, 0);
 
-		if (hstr == NULL) _asl_append_string(&out, len, "unknown", ENCODE_NONE, 0);
-		else _asl_append_string(&out, len, hstr, ENCODE_VIS, 0);
+		if (hstr == NULL) _asl_append_string(&out, len, "unknown", ASL_ENCODE_NONE, 0);
+		else _asl_append_string(&out, len, hstr, text_encoding, 0);
 
-		_asl_append_string(&out, len, " ", ENCODE_NONE, 0);
+		_asl_append_string(&out, len, " ", ASL_ENCODE_NONE, 0);
 
-		if (sstr == NULL) _asl_append_string(&out, len, "unknown", ENCODE_NONE, 0);
-		else _asl_append_string(&out, len, sstr, ENCODE_VIS, 0);
+		if (sstr == NULL) _asl_append_string(&out, len, "unknown", ASL_ENCODE_NONE, 0);
+		else _asl_append_string(&out, len, sstr, text_encoding, 0);
 
 		if ((pstr != NULL) && (strcmp(pstr, "-1")))
 		{
-			_asl_append_string(&out, len, "[", ENCODE_NONE, 0);
-			_asl_append_string(&out, len, pstr, ENCODE_NONE, 0);
-			_asl_append_string(&out, len, "]", ENCODE_NONE, 0);
+			_asl_append_string(&out, len, "[", ASL_ENCODE_NONE, 0);
+			_asl_append_string(&out, len, pstr, ASL_ENCODE_NONE, 0);
+			_asl_append_string(&out, len, "]", ASL_ENCODE_NONE, 0);
 		}
 
-		if ((rprc != NULL) || (rpid != NULL)) _asl_append_string(&out, len, " (", ENCODE_NONE, 0);
+		if ((rprc != NULL) || (rpid != NULL)) _asl_append_string(&out, len, " (", ASL_ENCODE_NONE, 0);
 
-		if (rprc != NULL) _asl_append_string(&out, len, rprc, ENCODE_VIS, 0);
+		if (rprc != NULL) _asl_append_string(&out, len, rprc, text_encoding, 0);
 		if (rpid != NULL)
 		{
-			_asl_append_string(&out, len, "[", ENCODE_NONE, 0);
-			_asl_append_string(&out, len, rpid, ENCODE_NONE, 0);
-			_asl_append_string(&out, len, "]", ENCODE_NONE, 0);
+			_asl_append_string(&out, len, "[", ASL_ENCODE_NONE, 0);
+			_asl_append_string(&out, len, rpid, ASL_ENCODE_NONE, 0);
+			_asl_append_string(&out, len, "]", ASL_ENCODE_NONE, 0);
 		}
 
-		if ((rprc != NULL) || (rpid != NULL)) _asl_append_string(&out, len, ")", ENCODE_NONE, 0);
+		if ((rprc != NULL) || (rpid != NULL)) _asl_append_string(&out, len, ")", ASL_ENCODE_NONE, 0);
 
 		if (mf == MFMT_STD)
 		{
-			_asl_append_string(&out, len, " <", ENCODE_NONE, 0);
-			_asl_append_string(&out, len, _asl_level_string(level), ENCODE_NONE, 0);
-			_asl_append_string(&out, len, ">", ENCODE_NONE, 0);
+			_asl_append_string(&out, len, " <", ASL_ENCODE_NONE, 0);
+			_asl_append_string(&out, len, _asl_level_string(level), ASL_ENCODE_NONE, 0);
+			_asl_append_string(&out, len, ">", ASL_ENCODE_NONE, 0);
 		}
 
-		_asl_append_string(&out, len, ": ", ENCODE_NONE, 0);
+		_asl_append_string(&out, len, ": ", ASL_ENCODE_NONE, 0);
 
-		if (mstr != NULL) _asl_append_string(&out, len, mstr, ENCODE_VIS, 0);
+		if (mstr != NULL) _asl_append_string(&out, len, mstr, text_encoding, 0);
 
-		_asl_append_string(&out, len, "\n", ENCODE_NONE, 0);
+		_asl_append_string(&out, len, "\n", ASL_ENCODE_NONE, 0);
 		return out;
 	}
 
 	if (mf == MFMT_XML)
 	{
-		_asl_append_string(&out, len, "\t<dict>\n", ENCODE_NONE, 0);
+		_asl_append_string(&out, len, "\t<dict>\n", ASL_ENCODE_NONE, 0);
 
 		for (i = 0; i < msg->count; i++)
 		{
@@ -2393,7 +2608,7 @@ asl_format_message(aslmsg msg, const char *mfmt, const char *tfmt, uint32_t *len
 			}
 		}
 
-		_asl_append_string(&out, len, "\t</dict>\n", ENCODE_NONE, 0);
+		_asl_append_string(&out, len, "\t</dict>\n", ASL_ENCODE_NONE, 0);
 
 		return out;
 	}
@@ -2453,12 +2668,12 @@ asl_format_message(aslmsg msg, const char *mfmt, const char *tfmt, uint32_t *len
 					if (!strcmp(k, ASL_KEY_TIME))
 					{
 						tstr = _asl_time_string(tf, v);
-						_asl_append_string(&out, len, tstr, ENCODE_NONE, 0);
+						_asl_append_string(&out, len, tstr, ASL_ENCODE_NONE, 0);
 						if (tstr != NULL) free(tstr);
 					}
 					else
 					{
-						_asl_append_string(&out, len, (char *)v, ENCODE_NONE, 0);
+						_asl_append_string(&out, len, (char *)v, ASL_ENCODE_NONE, 0);
 					}
 				}
 			}
@@ -2468,18 +2683,18 @@ asl_format_message(aslmsg msg, const char *mfmt, const char *tfmt, uint32_t *len
 		if (mfmt[i] == '\\')
 		{
 			i++;
-			if (mfmt[i] == '$') _asl_append_string(&out, len, "$", ENCODE_NONE, 0);
-			else if (mfmt[i] == 'e') _asl_append_string(&out, len, "\e", ENCODE_NONE, 0);
-			else if (mfmt[i] == 's') _asl_append_string(&out, len, " ", ENCODE_NONE, 0);
-			else if (mfmt[i] == 'a') _asl_append_string(&out, len, "\a", ENCODE_NONE, 0);
-			else if (mfmt[i] == 'b') _asl_append_string(&out, len, "\b", ENCODE_NONE, 0);
-			else if (mfmt[i] == 'f') _asl_append_string(&out, len, "\f", ENCODE_NONE, 0);
-			else if (mfmt[i] == 'n') _asl_append_string(&out, len, "\n", ENCODE_NONE, 0);
-			else if (mfmt[i] == 'r') _asl_append_string(&out, len, "\r", ENCODE_NONE, 0);
-			else if (mfmt[i] == 't') _asl_append_string(&out, len, "\t", ENCODE_NONE, 0);
-			else if (mfmt[i] == 'v') _asl_append_string(&out, len, "\v", ENCODE_NONE, 0);
-			else if (mfmt[i] == '\'') _asl_append_string(&out, len, "\'", ENCODE_NONE, 0);
-			else if (mfmt[i] == '\\') _asl_append_string(&out, len, "\\", ENCODE_NONE, 0);
+			if (mfmt[i] == '$') _asl_append_string(&out, len, "$", ASL_ENCODE_NONE, 0);
+			else if (mfmt[i] == 'e') _asl_append_string(&out, len, "\e", ASL_ENCODE_NONE, 0);
+			else if (mfmt[i] == 's') _asl_append_string(&out, len, " ", ASL_ENCODE_NONE, 0);
+			else if (mfmt[i] == 'a') _asl_append_string(&out, len, "\a", ASL_ENCODE_NONE, 0);
+			else if (mfmt[i] == 'b') _asl_append_string(&out, len, "\b", ASL_ENCODE_NONE, 0);
+			else if (mfmt[i] == 'f') _asl_append_string(&out, len, "\f", ASL_ENCODE_NONE, 0);
+			else if (mfmt[i] == 'n') _asl_append_string(&out, len, "\n", ASL_ENCODE_NONE, 0);
+			else if (mfmt[i] == 'r') _asl_append_string(&out, len, "\r", ASL_ENCODE_NONE, 0);
+			else if (mfmt[i] == 't') _asl_append_string(&out, len, "\t", ASL_ENCODE_NONE, 0);
+			else if (mfmt[i] == 'v') _asl_append_string(&out, len, "\v", ASL_ENCODE_NONE, 0);
+			else if (mfmt[i] == '\'') _asl_append_string(&out, len, "\'", ASL_ENCODE_NONE, 0);
+			else if (mfmt[i] == '\\') _asl_append_string(&out, len, "\\", ASL_ENCODE_NONE, 0);
 			else if (isdigit(mfmt[i]))
 			{
 				oval = mfmt[i] - '0';
@@ -2494,17 +2709,17 @@ asl_format_message(aslmsg msg, const char *mfmt, const char *tfmt, uint32_t *len
 					}
 				}
 				c[0] = oval;
-				_asl_append_string(&out, len, c, ENCODE_NONE, 0);
+				_asl_append_string(&out, len, c, ASL_ENCODE_NONE, 0);
 			}
 			continue;
 		}
 
 		if (mfmt[i] == '\0') break;
 		c[0] = mfmt[i];
-		_asl_append_string(&out, len, c, ENCODE_NONE, 0);
+		_asl_append_string(&out, len, c, ASL_ENCODE_NONE, 0);
 	}
 
-	_asl_append_string(&out, len, "\n", ENCODE_NONE, 0);
+	_asl_append_string(&out, len, "\n", ASL_ENCODE_NONE, 0);
 
 	return out;
 }
@@ -2519,17 +2734,20 @@ asl_format_message(aslmsg msg, const char *mfmt, const char *tfmt, uint32_t *len
 int
 asl_send(aslclient ac, aslmsg msg)
 {
-	char *str, *out_raw, *out;
-	uint32_t i, len, level, lmask, outstatus, filter, senderx, facilityx;
+	char *str, *out_raw;
+	caddr_t out;
+	uint32_t i, len, outlen, level, lmask, outstatus, filter, check, senderx, facilityx;
 	uint64_t v64;
 	const char *val;
 	char *name, *x;
 	time_t tick;
+	struct timeval tval;
 	int status, rc_filter;
 	asl_client_t *asl;
 	int use_global_lock;
 	asl_msg_t *mt;
 	char hname[_POSIX_HOST_NAME_MAX];
+	kern_return_t kstatus;
 
 	use_global_lock = 0;
 	asl = (asl_client_t *)ac;
@@ -2549,49 +2767,88 @@ asl_send(aslclient ac, aslmsg msg)
 
 	lmask = ASL_FILTER_MASK(level);
 
-	filter = asl->filter;
-	rc_filter = 0;
-
 	if (!(asl->options & ASL_OPT_NO_REMOTE))
 	{
 		pthread_mutex_lock(&_asl_global.lock);
 
-		if (_asl_global.notify_token >= 0)
+		if (_asl_global.rc_change_token >= 0)
 		{
-			v64 = 0;
-
-			status = notify_get_state(_asl_global.notify_token, &v64);
-			if ((status == NOTIFY_STATUS_OK) && (v64 != 0))
+			/* initialize or re-check process-specific and master filters  */
+			check = 0;
+			status = notify_check(_asl_global.rc_change_token, &check);
+			if ((status == NOTIFY_STATUS_OK) && (check != 0))
 			{
-				filter = v64;
-				rc_filter = 1;
-			}
-		}
+				if (_asl_global.master_token >= 0)
+				{
+					v64 = 0;
+					status = notify_get_state(_asl_global.master_token, &v64);
+					if (status == NOTIFY_STATUS_OK) _asl_global.master_filter = v64;
+				}
 
-		if ((rc_filter == 0) && (_asl_global.master_token >= 0))
-		{
-			v64 = 0;
-
-			status = notify_get_state(_asl_global.master_token, &v64);
-			if ((status == NOTIFY_STATUS_OK) && (v64 != 0))
-			{
-				filter = v64;
+				if (_asl_global.notify_token >= 0)
+				{
+					v64 = 0;
+					status = notify_get_state(_asl_global.notify_token, &v64);
+					if (status == NOTIFY_STATUS_OK) _asl_global.proc_filter = v64;
+				}
 			}
 		}
 
 		pthread_mutex_unlock(&_asl_global.lock);
 	}
 
+	filter = asl->filter;
+	rc_filter = 0;
+
+	/* master filter overrides local filter */
+	if (_asl_global.master_filter != 0)
+	{
+		filter = _asl_global.master_filter;
+		rc_filter = 1;
+	}
+
+	/* process-specific filter overrides local and master */
+	if (_asl_global.proc_filter != 0)
+	{
+		filter = _asl_global.proc_filter;
+		rc_filter = 1;
+	}
+
 	/* 
-	 * Time, Host, PID, UID, and GID values get set here
+	 * Time, TimeNanoSec, Host, PID, UID, and GID values get set here
 	 */
 	str = NULL;
-	tick = time(NULL);
-	asprintf(&str, "%lu", tick);
-	if (str != NULL)
+	memset(&tval, 0, sizeof(struct timeval));
+
+	status = gettimeofday(&tval, NULL);
+	if (status == 0)
 	{
-		asl_set(msg, ASL_KEY_TIME, str);
-		free(str);
+		asprintf(&str, "%lu", tval.tv_sec);
+		if (str != NULL)
+		{
+			asl_set(msg, ASL_KEY_TIME, str);
+			free(str);
+			str = NULL;
+		}
+
+		asprintf(&str, "%lu", tval.tv_usec * 1000);
+		if (str != NULL)
+		{
+			asl_set(msg, ASL_KEY_TIME_NSEC, str);
+			free(str);
+			str = NULL;
+		}
+	}
+	else
+	{
+		tick = time(NULL);
+		asprintf(&str, "%lu", tick);
+		if (str != NULL)
+		{
+			asl_set(msg, ASL_KEY_TIME, str);
+			free(str);
+			str = NULL;
+		}
 	}
 
 	memset(&hname, 0, _POSIX_HOST_NAME_MAX);
@@ -2681,7 +2938,28 @@ asl_send(aslclient ac, aslmsg msg)
 		}
 	}
 
-	outstatus = 0;
+	/* Set "ASLOption store" if remote control is active */
+	if (rc_filter != 0)
+	{
+		val = asl_get(msg, ASL_KEY_OPTION);
+		if (val == NULL)
+		{
+			asl_set(msg, ASL_KEY_OPTION, ASL_OPT_STORE);
+		}
+		else
+		{
+			str = NULL;
+			asprintf(&str, "%s %s", ASL_OPT_STORE, val);
+			if (str != NULL)
+			{
+				asl_set(msg, ASL_KEY_OPTION, str);
+				free(str);
+				str = NULL;
+			}
+		}
+	}
+
+	outstatus = -1;
 
 	if (use_global_lock != 0) pthread_mutex_lock(&_asl_global.lock);
 
@@ -2692,39 +2970,48 @@ asl_send(aslclient ac, aslmsg msg)
 
 		if ((out_raw != NULL) && (len != 0))
 		{
-			asprintf(&out, "%10u %s\n", len + 1, out_raw);
-			if (out != NULL)
+			/* send a mach message to syslogd */
+			outlen = len + 11;
+			kstatus = vm_allocate(mach_task_self(), (vm_address_t *)&out, outlen + 1, TRUE);
+			if (kstatus == KERN_SUCCESS)
 			{
-				if (asl->sock == -1) _asl_connect(asl);
+				memset(out, 0, outlen + 1);
+				snprintf((char *)out, outlen, "%10u %s", len, out_raw);
 
-				if (asl->sock >= 0)
+				status = 0;
+
+				pthread_mutex_lock(&(_asl_global.port_lock));
+
+				if (_asl_global.server_port == MACH_PORT_NULL)
 				{
-					status = write(asl->sock, out, len + 12);
-					if (status < 0)
-					{
-						/* Write failed - try resetting */
-						close(asl->sock);
-						asl->sock = -1;
-						_asl_connect(asl);
-						if (asl->sock >= 0) status = write(asl->sock, out, len + 12);
-						if (status < 0) outstatus = -1;
-					}
-				}
-				else outstatus = -1;
+					_asl_global.port_count = 0;
 
-				free(out);
+					kstatus = bootstrap_look_up(bootstrap_port, ASL_SERVICE_NAME, &_asl_global.server_port);
+					if (kstatus == KERN_SUCCESS) _asl_global.port_count = 1;
+					else _asl_global.server_port = MACH_PORT_NULL;
+				}
+
+				pthread_mutex_unlock(&(_asl_global.port_lock));
+
+				if (kstatus == KERN_SUCCESS) kstatus = _asl_server_message(_asl_global.server_port, (caddr_t)out, outlen + 1);
+				else vm_deallocate(mach_task_self(), (vm_address_t)out, outlen + 1);
+
+				if (kstatus == KERN_SUCCESS) outstatus = 0;
 			}
 
 			free(out_raw);
 		}
 	}
 
+	outstatus = 0;
+
+	/* write to file descriptors */
 	for (i = 0; i < asl->fd_count; i++)
 	{
 		if (asl->fd_list[i] < 0) continue;
 
 		len = 0;
-		out = asl_format_message(msg, asl->fd_mfmt[i], asl->fd_tfmt[i], &len);
+		out = asl_format_message(msg, asl->fd_mfmt[i], asl->fd_tfmt[i], asl->fd_encoding[i], &len);
 		if (out == NULL) continue;
 
 		status = write(asl->fd_list[i], out, len - 1);
@@ -2782,7 +3069,7 @@ asl_free(aslmsg a)
 
 /*
  * Called if there's a malloc error while manipulating a message in asl_set_query.
- * Cleans up the key, kap, and op fields, sets count to zero.
+ * Cleans up the key, val, and op fields, sets count to zero.
  */
 static void
 _asl_clear_msg(asl_msg_t *msg)
@@ -2821,19 +3108,33 @@ _asl_clear_msg(asl_msg_t *msg)
 int
 asl_set_query(aslmsg a, const char *key, const char *val, uint32_t op)
 {
-	uint32_t i;
+	uint32_t i, len;
 	char *dk, *dv;
 	asl_msg_t *msg;
 
 	msg = (asl_msg_t *)a;
 
 	if (msg == NULL) return 0;
-
 	if (key == NULL) return -1;
 
 	dv = NULL;
 
-	if (streq(key, ASL_KEY_LEVEL))
+	if ((streq(key, ASL_KEY_MSG)) && (val != NULL))
+	{
+		/* strip trailing newlines */
+		dv = strdup(val);
+		if (dv == NULL) return -1;
+
+		len = strlen(dv);
+		i = len - 1;
+		while ((len > 0) && (dv[i] == '\n'))
+		{
+			dv[i] = '\0';
+			i--;
+			len--;
+		}
+	}
+	else if (streq(key, ASL_KEY_LEVEL))
 	{
 		if (val == NULL) return -1;
 		if (val[0] == '\0') return -1;
@@ -2960,7 +3261,12 @@ asl_set_query(aslmsg a, const char *key, const char *val, uint32_t op)
 	}
 
 	dk = strdup(key);
-	if (dk == NULL) return -1;
+	if (dk == NULL)
+	{
+		if (dv != NULL) free(dv);
+		_asl_clear_msg(msg);
+		return -1;
+	}
 
 	msg->key[msg->count] = dk;
 	msg->val[msg->count] = dv;
@@ -3063,104 +3369,41 @@ asl_unset(aslmsg a, const char *key)
 aslresponse
 asl_search(aslclient ac, aslmsg a)
 {
-	asl_search_result_t *batch, *out;
-	char *qstr, *str, *res;
-	uint32_t i, j, len, reslen, status;
-	uint64_t cmax, qmin;
-	kern_return_t kstatus;
-	security_token_t sec;
-	caddr_t vmstr;
+	asl_search_result_t query, *out;
+	asl_msg_t *q, *qlist[1];
+	uint32_t status, x;
+	uint64_t last_id, start_id;
+	asl_store_t *store;
 
-	if (a == NULL) return 0;
+	if (a == NULL) return NULL;
 
-	len = 0;
-	qstr = asl_msg_to_string((asl_msg_t *)a, &len);
+	q = (asl_msg_t *)a;
 
-	str = NULL;
-	if (qstr == NULL)
+	/* check for "ASLMessageId >[=] n" and set start_id */
+	start_id = 0;
+	x = _asl_msg_index(q, ASL_KEY_MSG_ID);
+	if ((x != (uint32_t)-1) && (q->val[x] != NULL) && (q->op != NULL) && (q->op[x] & ASL_QUERY_OP_GREATER))
 	{
-		asprintf(&str, "0\n");
-		len = 3;
-	}
-	else
-	{
-		asprintf(&str, "1\n%s\n", qstr);
-		len += 4;
-		free(qstr);
+		if (q->op[x] & ASL_QUERY_OP_EQUAL) start_id = atoi(q->val[x]);
+		else start_id = atoi(q->val[x]) + 1;
 	}
 
-	if (str == NULL) return NULL;
+	store = NULL;
+	status = asl_store_open_read(NULL, &store);
+	if (status != 0) return NULL;
+	if (store == NULL) return NULL;
 
-	if (asl_server_port == MACH_PORT_NULL)
-	{
-		kstatus = bootstrap_look_up(bootstrap_port, ASL_SERVICE_NAME, &asl_server_port);
-		if (kstatus != KERN_SUCCESS) return NULL;
-	}
-
-	/*
-	 * Fetch a batch of results each time through the loop.
-	 * Fetching many small batches rebuces the load on syslogd.
-	 */
 	out = NULL;
-	qmin = 0;
-	cmax = 0;
+	last_id = 0;
 
-	forever
-	{
-		res = NULL;
-		reslen = 0;
-		sec.val[0] = -1;
-		sec.val[1] = -1;
-		status = 0;
+	qlist[0] = a;
+	memset(&query, 0, sizeof(asl_search_result_t));
+	query.count = 1;
+	query.msg = qlist;
 
-		kstatus = vm_allocate(mach_task_self(), (vm_address_t *)&vmstr, len, TRUE);
-		if (kstatus != KERN_SUCCESS) return NULL;
+	status = asl_store_match(store, &query, &out, &last_id, start_id, 0, 1);
+	asl_store_close(store);
 
-		memmove(vmstr, str, len);
-
-		kstatus = _asl_server_query(asl_server_port, vmstr, len, qmin, FETCH_BATCH, 0, (caddr_t *)&res, &reslen, &cmax, (int *)&status, &sec);
-		if (kstatus != KERN_SUCCESS) break;
-		if (res == NULL) break;
-
-		batch = asl_list_from_string(res);
-		vm_deallocate(mach_task_self(), (vm_address_t)res, reslen);
-
-		if (batch == NULL) break;
-		if (batch->count == 0)
-		{
-			aslresponse_free(batch);
-			break;
-		}
-
-		if (out == NULL) out = (asl_search_result_t *)calloc(1, sizeof(asl_search_result_t));
-		if (out == NULL)
-		{
-			aslresponse_free(batch);
-			break;
-		}
-
-		if (out->count == 0) out->msg = (asl_msg_t **)calloc(batch->count, sizeof(asl_msg_t *));
-		else out->msg = (asl_msg_t **)reallocf(out->msg, (out->count + batch->count) * sizeof(asl_msg_t *));
-		if (out->msg == NULL)
-		{
-			aslresponse_free(batch);
-			free(out);
-			free(str);
-			return NULL;
-		}
-
-		for (i = 0, j = out->count; i < batch->count; i++, j++) out->msg[j] = batch->msg[i];
-
-		out->count += batch->count;
-		free(batch->msg);
-		free(batch);
-
-		if (i < FETCH_BATCH) break;
-
-		if (cmax > qmin) qmin = cmax;
-	}
-
-	free(str);
 	return out;
 }
 
@@ -3522,65 +3765,5 @@ asl_parse_time(const char *in)
 
 	return -1;
 }
-
-#ifdef ASL_SYSLOG_COMPAT
-
-__private_extern__ void
-asl_syslog_syslog(int pri, const char *fmt, ...)
-{
-	va_list ap;
-	asl_msg_t *m;
-
-	if (fmt == NULL) return;
-
-	m = asl_new(ASL_TYPE_MSG);
-
-	va_start(ap, fmt);
-	asl_vlog(NULL, m, pri, fmt, ap);
-	va_end(ap);
-
-	asl_free(m);
-}
-
-__private_extern__ void
-asl_syslog_vsyslog(int pri, const char *fmt, va_list ap)
-{
-	asl_msg_t *m;
-
-	m = asl_new(ASL_TYPE_MSG);
-	asl_vlog(NULL, m, pri, fmt, ap);
-	asl_free(m);
-}
-
-__private_extern__ void
-asl_syslog_openlog(const char *ident, int flags, int facility)
-{
-	const char *fname;
-	uint32_t opts;
-
-	opts = 0;
-
-	if (flags & LOG_NDELAY) opts |= ASL_OPT_NO_DELAY;
-	if (flags & LOG_PERROR) opts |= ASL_OPT_STDERR;
-
-	fname = asl_syslog_faciliy_num_to_name(facility);
-	if (fname == NULL) fname = "user";
-
-	asl_global_client = asl_open(ident, fname, opts);
-}
-
-__private_extern__ void
-asl_syslog_closelog()
-{
-	asl_close();
-}
-
-__private_extern__ int
-asl_syslog_setlogmask(int p)
-{
-	return asl_set_filter(p);
-}
-
-#endif ASL_SYSLOG_COMPAT
 
 #endif /* BUILDING_VARIANT */

@@ -1,6 +1,6 @@
---- _hdtoa.c.orig	2006-08-14 16:12:46.000000000 -0700
-+++ _hdtoa.c	2006-08-14 23:02:39.000000000 -0700
-@@ -55,7 +55,7 @@
+--- _hdtoa.c.orig	2008-09-07 11:38:10.000000000 -0700
++++ _hdtoa.c	2008-09-07 12:49:47.000000000 -0700
+@@ -55,7 +55,7 @@ roundup(char *s0, int ndigits)
  			*s = 1;
  			return (1);
  		}
@@ -9,10 +9,44 @@
  	}
  	++*s;
  	return (0);
-@@ -223,12 +223,17 @@
+@@ -126,12 +126,12 @@ __hdtoa(double d, const char *xdigs, int
+ 	static const int sigfigs = (DBL_MANT_DIG + 3) / 4;
+ 	union IEEEd2bits u;
+ 	char *s, *s0;
+-	int bufsize;
++	int bufsize, f;
+ 
+ 	u.d = d;
+ 	*sign = u.bits.sign;
+ 
+-	switch (fpclassify(d)) {
++	switch (f = fpclassify(d)) {
+ 	case FP_NORMAL:
+ 		*decpt = u.bits.exp - DBL_ADJ;
+ 		break;
+@@ -149,7 +149,7 @@ __hdtoa(double d, const char *xdigs, int
+ 		*decpt = INT_MAX;
+ 		return (nrv_alloc(NANSTR, rve, sizeof(NANSTR) - 1));
+ 	default:
+-		abort();
++		LIBC_ABORT("fpclassify returned %d", f);
+ 	}
+ 
+ 	/* FP_NORMAL or FP_SUBNORMAL */
+@@ -210,6 +210,7 @@ __hdtoa(double d, const char *xdigs, int
+ 	return (s0);
+ }
+ 
++#ifndef LDBL_COMPAT
+ #if (LDBL_MANT_DIG > DBL_MANT_DIG)
+ 
+ /*
+@@ -222,13 +223,18 @@ __hldtoa(long double e, const char *xdig
+ 	static const int sigfigs = (LDBL_MANT_DIG + 3) / 4;
  	union IEEEl2bits u;
  	char *s, *s0;
- 	int bufsize;
+-	int bufsize;
++	int bufsize, f;
 +#ifdef LDBL_HEAD_TAIL_PAIR
 +	uint32_t bits[4];
 +	int i, pos;
@@ -21,18 +55,28 @@
  	u.e = e;
  	*sign = u.bits.sign;
  
- 	switch (fpclassify(e)) {
+-	switch (fpclassify(e)) {
++	switch (f = fpclassify(e)) {
  	case FP_NORMAL:
 +	case FP_SUPERNORMAL:
  		*decpt = u.bits.exp - LDBL_ADJ;
  		break;
  	case FP_ZERO:
-@@ -270,6 +275,19 @@
+@@ -245,7 +251,7 @@ __hldtoa(long double e, const char *xdig
+ 		*decpt = INT_MAX;
+ 		return (nrv_alloc(NANSTR, rve, sizeof(NANSTR) - 1));
+ 	default:
+-		abort();
++		LIBC_ABORT("fpclassify returned %d", f);
+ 	}
+ 
+ 	/* FP_NORMAL or FP_SUBNORMAL */
+@@ -270,6 +276,19 @@ __hldtoa(long double e, const char *xdig
  	 */
  	for (s = s0 + bufsize - 1; s > s0 + sigfigs - 1; s--)
  		*s = 0;
 +#ifdef LDBL_HEAD_TAIL_PAIR
-+	_ldbl2array32dd(u, bits);
++	*decpt -= _ldbl2array32dd(u, bits);
 +	i = 0;
 +	pos = 8;
 +	for (; s > s0; s--) {
@@ -47,7 +91,7 @@
  	for (; s > s0 + sigfigs - (LDBL_MANL_SIZE / 4) - 1 && s > s0; s--) {
  		*s = u.bits.manl & 0xf;
  		u.bits.manl >>= 4;
-@@ -278,6 +296,7 @@
+@@ -278,6 +297,7 @@ __hldtoa(long double e, const char *xdig
  		*s = u.bits.manh & 0xf;
  		u.bits.manh >>= 4;
  	}
@@ -55,7 +99,7 @@
  
  	/*
  	 * At this point, we have snarfed all the bits in the
-@@ -285,7 +304,11 @@
+@@ -285,7 +305,11 @@ __hldtoa(long double e, const char *xdig
  	 * (partial) nibble, which is dealt with by the next
  	 * statement.  We also tack on the implicit normalization bit.
  	 */
@@ -67,3 +111,8 @@
  
  	/* If ndigits < 0, we are expected to auto-size the precision. */
  	if (ndigits < 0) {
+@@ -317,3 +341,4 @@ __hldtoa(long double e, const char *xdig
+ }
+ 
+ #endif	/* (LDBL_MANT_DIG == DBL_MANT_DIG) */
++#endif  /* !LDBL_COMPAT */

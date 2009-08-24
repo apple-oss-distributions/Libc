@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1999 Apple Computer, Inc. All rights reserved.
+ * Copyright (c) 1999, 2008 Apple Inc. All rights reserved.
  *
  * @APPLE_LICENSE_HEADER_START@
  * 
@@ -28,5 +28,5 @@
 int
 isnan(double d)
 {
-    return __isnand(d);
+    return __inline_isnand(d);
 }

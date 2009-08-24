@@ -1,11 +1,10 @@
 #	Makefile.inc,v 1.2 1994/09/13 21:26:01 wollman Exp
 # $FreeBSD: src/lib/libc/stdtime/Makefile.inc,v 1.14 2002/11/18 09:50:56 ru Exp $
 
-.PATH:	${.CURDIR}/stdtime
+.PATH: ${.CURDIR}/stdtime
+CWD := ${.CURDIR}/stdtime
 
 CFLAGS += -I${.CURDIR}/stdtime
-
-CFLAGS-localtime-fbsd.c += -DNOTIFY_TZ
 
 LEGACYSRCS += localtime.c strftime.c strptime.c
 
@@ -13,6 +12,7 @@ MISRCS += getdate.c timezone_unix03.c
 
 # set the LIBC_ALIAS_* macros so we can decorate the symbol independent
 # of other macro settings
+CFLAGS-getdate.c += -D_DARWIN_UNLIMITED_STREAMS
 CFLAGS-localtime-fbsd.c += -DLIBC_ALIAS_MKTIME
 CFLAGS-strftime-fbsd.c += -DLIBC_ALIAS_STRFTIME -DLIBC_ALIAS_STRFTIME_L
 CFLAGS-strptime-fbsd.c += -DLIBC_ALIAS_STRPTIME -DLIBC_ALIAS_STRPTIME_L

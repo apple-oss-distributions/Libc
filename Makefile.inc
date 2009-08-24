@@ -6,9 +6,6 @@
 # errors if the included makefiles don't change these:
 MDSRCS=
 MISRCS=
-MDASM=
-MIASM=
-NOASM=
 
 # SUPPRESSSRCS is used to prevent machine-independent files from being
 # built, when a machine-dependent file defines multiple symbols.
@@ -20,72 +17,48 @@ AUTOPATCHHDRS=
 AUTOPATCHMAN=
 AUTOPATCHSRCS=
 
-# Auto-patch into OBJROOT
+# Auto-patch (or symlink)
 _AUTOPATCH: .USE
 	@if [ -f ${.ALLSRC}.patch ]; then \
-	    echo cp ${.ALLSRC} ${.TARGET}; \
-	    cp ${.ALLSRC} ${.TARGET}; \
-	    echo patch ${.TARGET} ${.ALLSRC}.patch; \
-	    patch ${.TARGET} ${.ALLSRC}.patch; \
+	    ${ECHO} ${CP} ${.ALLSRC} ${.TARGET}; \
+	    ${CP} ${.ALLSRC} ${.TARGET}; \
+	    ${ECHO} ${PATCH} ${.TARGET} ${.ALLSRC}.patch; \
+	    ${PATCH} ${.TARGET} ${.ALLSRC}.patch; \
 	else \
-	    echo ln -s ${.ALLSRC} ${.TARGET}; \
-	    ln -s ${.ALLSRC} ${.TARGET}; \
-	fi
-# Auto-patch into current directory
-_AUTOPATCHCUR: .USE
-	@echo cp ${.ALLSRC} ${.TARGET}; \
-	cp ${.ALLSRC} ${.TARGET}; \
-	if [ -f ${.ALLSRC}.patch ]; then \
-	    echo patch ${.TARGET} ${.ALLSRC}.patch; \
-	    patch ${.TARGET} ${.ALLSRC}.patch; \
+	    t=`${BASENAME} ${.ALLSRC}` && x=`${DIRNAME} ${.ALLSRC}` && d=`${BASENAME} $$x`; \
+	    ${ECHO} ${LN} -fs $$d/$$t ${.TARGET}; \
+	    ${LN} -fs $$d/$$t ${.TARGET}; \
 	fi
 # Standard compilation for the various forms
 _STANDARD_STATIC: .USE
-	${CC} -static \
+	${MYCC} -static \
 	    ${PRECFLAGS} ${PRECFLAGS-${.IMPSRC:T}} \
 	    ${CFLAGS} ${CFLAGS-${.IMPSRC:T}} \
 	    ${VARIANTCFLAGS} ${LIBCFLAGS} \
 	    -Os ${OPTIMIZE-${.IMPSRC:T}} -c ${.IMPSRC} -o ${.TARGET}
 _STANDARD_PROFILE: .USE
-	${CC} -pg -DPROFILE \
+	${MYCC} -pg -DPROFILE \
 	    ${PRECFLAGS} ${PRECFLAGS-${.IMPSRC:T}} \
 	    ${CFLAGS} ${CFLAGS-${.IMPSRC:T}} \
 	    ${VARIANTCFLAGS} ${LIBCFLAGS} \
 	    -Os ${OPTIMIZE-${.IMPSRC:T}} -c ${.IMPSRC} -o ${.TARGET}
 _STANDARD_DYNAMIC: .USE
-	${CC} \
+	${MYCC} \
 	    ${PRECFLAGS} ${PRECFLAGS-${.IMPSRC:T}} \
 	    ${CFLAGS} ${CFLAGS-${.IMPSRC:T}} \
 	    ${VARIANTCFLAGS} ${LIBCFLAGS} \
 	    -Os ${OPTIMIZE-${.IMPSRC:T}} -c ${.IMPSRC} -o ${.TARGET}
 _STANDARD_DEBUG: .USE
-	${CC} -g -DDEBUG \
+	${MYCC} -g -DDEBUG \
 	    ${PRECFLAGS} ${PRECFLAGS-${.IMPSRC:T}} \
 	    ${CFLAGS} ${CFLAGS-${.IMPSRC:T}} \
 	    ${VARIANTCFLAGS} ${LIBCFLAGS} \
 	    -c ${.IMPSRC} -o ${.TARGET}
 
-# set object file suffix
-.if make(lib${LIB}_static.a)
-OBJSUFFIX = o
-.endif
-.if make(lib${LIB}_profile.a)
-OBJSUFFIX = po
-.endif
-.if make(lib${LIB}_debug.a)
-OBJSUFFIX = do
-.endif
-.if make(lib${LIB}.a)
-OBJSUFFIX = So
-.endif
-
-.ifnmake autopatch
 #
 # If there is a machine dependent makefile, use it:
 #
-.if exists(${.CURDIR}/${MACHINE_ARCH}/Makefile.inc)
-.include "${.CURDIR}/${MACHINE_ARCH}/Makefile.inc"
-.endif
+.sinclude "${.CURDIR}/${MACHINE_ARCH}/Makefile.inc"
 
 .include "${.CURDIR}/darwin/Makefile.inc"
 .include "${.CURDIR}/db/Makefile.inc"
@@ -95,7 +68,9 @@ OBJSUFFIX = So
 .include "${.CURDIR}/gen/Makefile.inc"
 .include "${.CURDIR}/gmon/Makefile.inc"
 .include "${.CURDIR}/include/Makefile.inc"
+.ifdef FEATURE_LEGACY_NX_INTERNAT_APIS
 .include "${.CURDIR}/internat/Makefile.inc"
+.endif
 .include "${.CURDIR}/locale/Makefile.inc"
 .include "${.CURDIR}/man/Makefile.inc"
 .include "${.CURDIR}/net/Makefile.inc"
@@ -128,4 +103,3 @@ SRCS+=	${_src}
 .endif
 .endfor
 .endif
-.endif # !autopatch

@@ -33,6 +33,7 @@ THIS SOFTWARE.
 #define GDTOA_H_INCLUDED
 
 #include "arith.h"
+#include <stddef.h> /* for size_t */
 
 #ifndef Long
 #define Long long
@@ -74,9 +75,9 @@ typedef unsigned short UShort;
 
 	/* The following may be or-ed into one of the above values. */
 
-	STRTOG_Neg	= 0x08,
-	STRTOG_Inexlo	= 0x10,
-	STRTOG_Inexhi	= 0x20,
+	STRTOG_Neg	= 0x08, /* does not affect STRTOG_Inexlo or STRTOG_Inexhi */
+	STRTOG_Inexlo	= 0x10,	/* returned result rounded toward zero */
+	STRTOG_Inexhi	= 0x20, /* returned result rounded away from zero */
 	STRTOG_Inexact	= 0x30,
 	STRTOG_Underflow= 0x40,
 	STRTOG_Overflow	= 0x80
@@ -109,14 +110,14 @@ extern char* gdtoa ANSI((FPI *fpi, int be, ULong *bits, int *kindp,
 extern void freedtoa ANSI((char*));
 extern float  strtof ANSI((CONST char *, char **));
 extern double strtod ANSI((CONST char *, char **));
-extern int strtodg ANSI((CONST char*, char**, FPI*, Long*, ULong*));
+extern int strtodg ANSI((CONST char*, char**, FPI*, Long*, ULong*, locale_t)) __DARWIN_ALIAS(strtodg);
 
-extern char*	g_ddfmt  ANSI((char*, double*, int, unsigned));
-extern char*	g_dfmt   ANSI((char*, double*, int, unsigned));
-extern char*	g_ffmt   ANSI((char*, float*,  int, unsigned));
-extern char*	g_Qfmt   ANSI((char*, void*,   int, unsigned));
-extern char*	g_xfmt   ANSI((char*, void*,   int, unsigned));
-extern char*	g_xLfmt  ANSI((char*, void*,   int, unsigned));
+extern char*	g_ddfmt  ANSI((char*, double*, int, size_t));
+extern char*	g_dfmt   ANSI((char*, double*, int, size_t));
+extern char*	g_ffmt   ANSI((char*, float*,  int, size_t));
+extern char*	g_Qfmt   ANSI((char*, void*,   int, size_t));
+extern char*	g_xfmt   ANSI((char*, void*,   int, size_t));
+extern char*	g_xLfmt  ANSI((char*, void*,   int, size_t));
 
 extern int	strtoId  ANSI((CONST char*, char**, double*, double*));
 extern int	strtoIdd ANSI((CONST char*, char**, double*, double*));
@@ -133,10 +134,10 @@ extern int	strtorxL ANSI((CONST char*, char**, int, void*));
 #if 1
 extern int	strtodI  ANSI((CONST char*, char**, double*));
 extern int	strtopd  ANSI((CONST char*, char**, double*));
-extern int	strtopdd ANSI((CONST char*, char**, double*));
+extern int	strtopdd ANSI((CONST char*, char**, double*, locale_t));
 extern int	strtopf  ANSI((CONST char*, char**, float*));
 extern int	strtopQ  ANSI((CONST char*, char**, void*));
-extern int	strtopx  ANSI((CONST char*, char**, void*));
+extern int	strtopx  ANSI((CONST char*, char**, void*, locale_t));
 extern int	strtopxL ANSI((CONST char*, char**, void*));
 #else
 #define strtopd(s,se,x) strtord(s,se,1,x)

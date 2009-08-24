@@ -46,6 +46,7 @@ __FBSDID("$FreeBSD: src/lib/libc/locale/localeconv.c,v 1.13 2003/06/26 10:46:16 
 #include "lmonetary.h"
 #include "lnumeric.h"
 
+#ifdef __APPLE_PR3417676_HACK__
 /*------------------------------------------------------------------------
  * PR-3417676: We need to provide a way to force "C" locale style number
  * formatting independent of the locale setting.  We provide private
@@ -100,6 +101,7 @@ __setonlyClocaleconv(int val)
     _onlyClocaleconv = val;
     return prev;
 }
+#endif /* __APPLE_PR3417676_HACK__ */
 
 /* 
  * The localeconv() function constructs a struct lconv from the current
@@ -117,28 +119,19 @@ __setonlyClocaleconv(int val)
 struct lconv *
 localeconv_l(locale_t loc)
 {
-    struct __xlocale_st_localeconv *lc;
+    struct lconv *lc;
 
     NORMALIZE_LOCALE(loc);
-    if (loc->__lc_localeconv && !loc->__mlocale_changed && !loc->__nlocale_changed)
-	return &loc->__lc_localeconv->__ret;
-
-    lc = (struct __xlocale_st_localeconv *)malloc(sizeof(struct __xlocale_st_localeconv));
-    lc->__refcount = 1;
-    lc->__free_extra = NULL;
-    if (loc->__lc_localeconv)
-	lc->__ret = loc->__lc_localeconv->__ret;
-    else {
-	loc->__mlocale_changed = 1;
-	loc->__nlocale_changed = 1;
-    }
 
     if (loc->__mlocale_changed) {
+      XL_LOCK(loc);
+      if (loc->__mlocale_changed) {
 	/* LC_MONETARY part */
         struct lc_monetary_T * mptr; 
+	struct lconv *lc = &loc->__lc_localeconv;
 
-#define M_ASSIGN_STR(NAME) (lc->__ret.NAME = (char*)mptr->NAME)
-#define M_ASSIGN_CHAR(NAME) (lc->__ret.NAME = mptr->NAME[0])
+#define M_ASSIGN_STR(NAME) (lc->NAME = (char*)mptr->NAME)
+#define M_ASSIGN_CHAR(NAME) (lc->NAME = mptr->NAME[0])
 
 	mptr = __get_current_monetary_locale(loc);
 	M_ASSIGN_STR(int_curr_symbol);
@@ -163,25 +156,29 @@ localeconv_l(locale_t loc)
 	M_ASSIGN_CHAR(int_p_sign_posn);
 	M_ASSIGN_CHAR(int_n_sign_posn);
 	loc->__mlocale_changed = 0;
+      }
+      XL_UNLOCK(loc);
     }
 
     if (loc->__nlocale_changed) {
+      XL_LOCK(loc);
+      if (loc->__nlocale_changed) {
 	/* LC_NUMERIC part */
         struct lc_numeric_T * nptr; 
+	struct lconv *lc = &loc->__lc_localeconv;
 
-#define N_ASSIGN_STR(NAME) (lc->__ret.NAME = (char*)nptr->NAME)
+#define N_ASSIGN_STR(NAME) (lc->NAME = (char*)nptr->NAME)
 
 	nptr = __get_current_numeric_locale(loc);
 	N_ASSIGN_STR(decimal_point);
 	N_ASSIGN_STR(thousands_sep);
 	N_ASSIGN_STR(grouping);
 	loc->__nlocale_changed = 0;
+      }
+      XL_UNLOCK(loc);
     }
 
-    XL_RELEASE(loc->__lc_localeconv);
-    loc->__lc_localeconv = lc;
-
-    return (&lc->__ret);
+    return &loc->__lc_localeconv;
 }
 
 /*
@@ -190,11 +187,13 @@ localeconv_l(locale_t loc)
 struct lconv *
 localeconv()
 {
+#ifdef __APPLE_PR3417676_HACK__
     /*--------------------------------------------------------------------
      * If _onlyClocaleconv is non-zero, just return __lconv, which is a "C"
      * struct lconv *.  Otherwise, do the normal thing.
      *--------------------------------------------------------------------*/
     if (_onlyClocaleconv)
 	return &_C_lconv;
+#endif /* __APPLE_PR3417676_HACK__ */
     return localeconv_l(__current_locale());
 }

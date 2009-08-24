@@ -35,6 +35,7 @@
 #define NOTIFY_SYSTEM_ASL_FILTER "com.apple.system.syslog.asl_filter"
 #define NOTIFY_PREFIX_SYSTEM "com.apple.system.syslog"
 #define NOTIFY_PREFIX_USER "user.syslog"
+#define NOTIFY_RC "com.apple.asl.remote"
 
 #define ASL_MSG_FMT_RAW "raw"
 #define ASL_MSG_FMT_STD "std"
@@ -46,8 +47,17 @@
 #define ASL_TIME_FMT_UTC "utc"
 #define ASL_TIME_FMT_LCL "lcl"
 
+#define ASL_ENCODE_NONE 0
+#define ASL_ENCODE_SAFE 1
+#define ASL_ENCODE_VIS  2
+#define ASL_ENCODE_ASL  3
+
 #define ASL_KEY_REF_PID  "RefPID"
 #define ASL_KEY_REF_PROC "RefProc"
+#define ASL_KEY_OPTION "ASLOption"
+
+#define ASL_OPT_IGNORE "ignore"
+#define ASL_OPT_STORE "store"
 
 typedef struct __aslclient
 {
@@ -66,6 +76,7 @@ typedef struct __aslclient
 	int *fd_list;
 	char **fd_mfmt;
 	char **fd_tfmt;
+	uint32_t *fd_encoding;
 	uint32_t reserved1;
 	void *reserved2;
 } asl_client_t;
@@ -89,9 +100,9 @@ typedef struct __aslresponse
 
 __BEGIN_DECLS
 
-int asl_add_output(aslclient asl, int fd, const char *msg_fmt, const char *time_fmt);
+int asl_add_output(aslclient asl, int fd, const char *msg_fmt, const char *time_fmt, uint32_t text_encoding);
 int asl_remove_output(aslclient asl, int fd);
-char *asl_format_message(aslmsg msg, const char *msg_fmt, const char *time_fmt, uint32_t *outlen);
+char *asl_format_message(aslmsg msg, const char *msg_fmt, const char *time_fmt, uint32_t text_encoding, uint32_t *outlen);
 
 __END_DECLS
 

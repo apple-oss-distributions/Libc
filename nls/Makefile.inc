@@ -2,11 +2,14 @@
 # $FreeBSD: src/lib/libc/nls/Makefile.inc,v 1.5.2.2 2001/04/25 10:04:07 ru Exp $
 
 .PATH: ${.CURDIR}/nls
+CWD := ${.CURDIR}/nls
 
 .include "Makefile.fbsd_begin"
 FBSDMISRCS= msgcat.c
 FBSDHDRS= msgcat.h
 .include "Makefile.fbsd_end"
+
+CFLAGS-msgcat-fbsd.c += -D_DARWIN_UNLIMITED_STREAMS
 
 # Install msgcat.h for usage by gencat (in adv_cmds)
 LOCALHDRS+=	${.CURDIR}/nls/msgcat.h

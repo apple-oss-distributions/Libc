@@ -67,7 +67,8 @@ funopen(cookie, readfn, writefn, seekfn, closefn)
 		else
 			flags = __SRW;		/* read-write */
 	}
-	if ((fp = __sfp()) == NULL)
+	/* funopen in not covered in SUSv3, so never count the streams */
+	if ((fp = __sfp(0)) == NULL)
 		return (NULL);
 	fp->_flags = flags;
 	fp->_file = -1;

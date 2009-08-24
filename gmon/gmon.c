@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1999 Apple Computer, Inc. All rights reserved.
+ * Copyright (c) 1999, 2003, 2004, 2007, 2008 Apple Inc. All rights reserved.
  *
  * @APPLE_LICENSE_HEADER_START@
  * 
@@ -212,8 +212,7 @@ void)
 	 * above calls so the dynamic libraries will be added after the
 	 * executable.
 	 */
-	if(_dyld_present())
-	    _dyld_moninit(monaddition);
+	_dyld_moninit(monaddition);
 #endif
 }
 
@@ -445,7 +444,7 @@ const char *filename)
 	write(fd, &magic, sizeof(uint32_t));
 
 #if defined(__DYNAMIC__)
-        if(_dyld_present()){
+        {
 	    image_count = _dyld_image_count();
 	    if(image_count > 1){
 #ifdef DYLD_DEBUG
@@ -476,7 +475,7 @@ const char *filename)
 		write(fd, &image_count, sizeof(uint32_t));
 		image_count++;
 		for(i = 1; i < image_count; i++){
-		    image_header = _dyld_get_image_header(i);
+		    image_header = (intptr_t)_dyld_get_image_header(i);
 		    write(fd, &image_header, sizeof(intptr_t));
 		    image_name = _dyld_get_image_name(i);
 		    write(fd, image_name, strlen(image_name) + 1);

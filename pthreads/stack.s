@@ -104,6 +104,21 @@ LEAF(__adjust_sp,0)
 	subq	$0x100,%rax
 	ret
 
+#elif defined(__arm__)
+
+#import	<architecture/arm/asm_help.h>
+
+LEAF(__sp,0)
+	mov	r0,sp
+	bx	lr
+
+/*
+ * void *_adjust_sp(void *sp)
+ */
+LEAF(__adjust_sp,0)
+	sub	r0, r0, #0x100
+	bx	lr
+
 #else
 #error sp functions not defined for this architecture
 #endif

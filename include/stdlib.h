@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000, 2005 Apple Computer, Inc. All rights reserved.
+ * Copyright (c) 2000, 2002 - 2008 Apple Inc. All rights reserved.
  *
  * @APPLE_LICENSE_HEADER_START@
  * 
@@ -58,7 +58,7 @@
 #ifndef _STDLIB_H_
 #define _STDLIB_H_
 
-#include <available.h>
+#include <Availability.h>
 
 #include <_types.h>
 #if !defined(_ANSI_SOURCE)
@@ -140,9 +140,17 @@ extern int __mb_cur_max;
     && defined(_USE_EXTENDED_LOCALES_) && !defined(MB_CUR_MAX_L)
 #define	MB_CUR_MAX_L(x)	(___mb_cur_max_l(x))
 #endif
+//Begin-Libc
+/* f must be a literal string */
+#define LIBC_ABORT(f,...)	abort_report_np("%s:%s:%u: " f, __FILE__, __func__, __LINE__, ## __VA_ARGS__)
+//End-Libc
 
 __BEGIN_DECLS
 void	 abort(void) __dead2;
+//Begin-Libc
+__private_extern__
+void	 abort_report_np(const char *, ...) __dead2 __printflike(1, 2);
+//End-Libc
 int	 abs(int) __pure2;
 int	 atexit(void (*)(void));
 double	 atof(const char *);
@@ -170,6 +178,7 @@ void	*malloc(size_t);
 int	 mblen(const char *, size_t);
 size_t	 mbstowcs(wchar_t * __restrict , const char * __restrict, size_t);
 int	 mbtowc(wchar_t * __restrict, const char * __restrict, size_t);
+int 	 posix_memalign(void **, size_t, size_t);
 void	 qsort(void *, size_t, size_t,
 	    int (*)(const void *, const void *));
 int	 rand(void);
@@ -323,6 +332,11 @@ u_int32_t
 	 arc4random(void);
 void	 arc4random_addrandom(unsigned char *dat, int datlen);
 void	 arc4random_stir(void);
+#ifdef __BLOCKS__
+int	 atexit_b(void (^)(void));
+void	*bsearch_b(const void *, const void *, size_t,
+	    size_t, int (^)(const void *, const void *));
+#endif /* __BLOCKS__ */
 
 	 /* getcap(3) functions */
 char	*cgetcap(char *, const char *, int);
@@ -336,7 +350,7 @@ int	 cgetset(const char *);
 int	 cgetstr(char *, const char *, char **);
 int	 cgetustr(char *, const char *, char **);
 
-int	 daemon(int, int) __DARWIN_1050(daemon) __AVAILABLE_MAC_OS_X_VERSION_10_0_AND_LATER_BUT_DEPRECATED_IN_MAC_OS_X_VERSION_10_5;
+int	 daemon(int, int) __DARWIN_1050(daemon) __OSX_AVAILABLE_BUT_DEPRECATED(__MAC_10_0,__MAC_10_5,__IPHONE_2_0,__IPHONE_2_0);
 char	*devname(dev_t, mode_t);
 char	*devname_r(dev_t, mode_t, char *buf, int len);
 char	*getbsize(int *, long *);
@@ -346,8 +360,28 @@ const char
 
 int	 heapsort(void *, size_t, size_t,
 	    int (*)(const void *, const void *));
+#ifdef __BLOCKS__
+int	 heapsort_b(void *, size_t, size_t,
+	    int (^)(const void *, const void *));
+#endif /* __BLOCKS__ */
 int	 mergesort(void *, size_t, size_t,
 	    int (*)(const void *, const void *));
+#ifdef __BLOCKS__
+int	 mergesort_b(void *, size_t, size_t,
+	    int (^)(const void *, const void *));
+#endif /* __BLOCKS__ */
+void	 psort(void *, size_t, size_t,
+	    int (*)(const void *, const void *));
+#ifdef __BLOCKS__
+void	 psort_b(void *, size_t, size_t,
+	    int (^)(const void *, const void *));
+#endif /* __BLOCKS__ */
+void	 psort_r(void *, size_t, size_t, void *,
+	    int (*)(void *, const void *, const void *));
+#ifdef __BLOCKS__
+void	 qsort_b(void *, size_t, size_t,
+	    int (^)(const void *, const void *));
+#endif /* __BLOCKS__ */
 void	 qsort_r(void *, size_t, size_t, void *,
 	    int (*)(void *, const void *, const void *));
 int	 radixsort(const unsigned char **, int, const unsigned char *,

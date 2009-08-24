@@ -1,4 +1,8 @@
-PWD != pwd
+.include <CoreOS/Standard/Commands.mk>
+.include <CoreOS/Standard/Variables.mk>
+
+ALLARCHS = arm i386 ppc ppc64 x86_64 # installsrc doesn't set RC_ARCHS
+TOP != ${PWD}
 .ifdef DSTROOT
 DESTDIR = $(DSTROOT)
 .else
@@ -10,28 +14,35 @@ DESTDIR = /
 .endif
 .endif
 .ifndef OBJROOT
-OBJROOT = $(PWD)/OBJROOT
+OBJROOT = $(TOP)/OBJROOT
 .endif
 .ifndef SRCROOT
-SRCROOT = $(PWD)
+SRCROOT = $(TOP)
 .endif
 .ifndef SYMROOT
-SYMROOT = $(PWD)/SYMROOT
+SYMROOT = $(TOP)/SYMROOT
 .endif
-ARCH != arch
+MYARCH != ${ARCH}
 .ifndef RC_ARCHS
-RC_ARCHS = $(ARCH)
+RC_ARCHS = $(MYARCH)
 RC_$(RC_ARCHS) = 1
+.endif
+FIRST_ARCH != ${PERL} -e 'print $$ARGV[0]' ${RC_ARCHS}
+.ifndef RC_NONARCH_CFLAGS
+RC_NONARCH_CFLAGS = -pipe
 .endif
 .ifdef ALTUSRLOCALLIBSYSTEM
 LIBSYS = $(ALTUSRLOCALLIBSYSTEM)
 .else
-LIBSYS = $(NEXT_ROOT)/usr/local/lib/system
+LIBSYS = $(SDKROOT)/usr/local/lib/system
 .endif
-NJOBS != perl -e '$$n = `/usr/sbin/sysctl -n hw.ncpu`; printf "%d\n", $$n < 2 ? 2 : ($$n * 1.5)'
-BSDMAKE = bsdmake -f Makefile
-#BSDMAKEJ = $(BSDMAKE) -j $(NJOBS) -P
-BSDMAKEJ = $(BSDMAKE) -j $(NJOBS)
+NJOBS != ${PERL} -e '$$n = `$(SYSCTL) -n hw.ncpu`; printf "%d\n", $$n < 2 ? 2 : ($$n * 1.5)'
+.ifdef DEBUG
+MYBSDMAKE = $(BSDMAKE) -f Makefile -P
+.else
+MYBSDMAKE = $(BSDMAKE) -f Makefile
+.endif
+MYBSDMAKEJ = $(MYBSDMAKE) -j $(NJOBS)
 
 # Set the DONT-BUILD-arch-form variable to non-empty to turn off building
 #DONT-BUILD-x86_64-static = 1
@@ -41,10 +52,17 @@ BSDMAKEJ = $(BSDMAKE) -j $(NJOBS)
 dynamic = dynamic
 static = static
 
-# Remove the arch stuff, since we know better here.
-LOCAL_CFLAGS != echo $(RC_CFLAGS) | sed 's/ *-arch [^ ][^ ]*//g'
+# Map RC_ARCHS to MACHINE_ARCH
+.for A in $(RC_ARCHS) $(MYARCH) # {
+MACHINE_ARCH-$(A) = $(A:C/^armv.*/arm/)
+.endfor # RC_ARCHS }
 
 FORMS := dynamic debug profile static
+
+OBJSUFFIX-dynamic = So
+OBJSUFFIX-debug = do
+OBJSUFFIX-profile = po
+OBJSUFFIX-static = o
 
 all: build
 
@@ -52,7 +70,7 @@ ROOTS := DSTROOT OBJROOT SYMROOT
 .for R in $(ROOTS) # {
 roots: $($(R))
 $($(R)):
-	mkdir -p '$($(R))'
+	${MKDIR} '$($(R))'
 .endfor # ROOTS }
 
 # These are the non B&I defaults
@@ -107,11 +125,11 @@ FRAMEWORKS = $(OBJROOT)/Frameworks
 .ifdef ALTFRAMEWORKSPATH
 FRAMEWORKPATH = ${ALTFRAMEWORKSPATH}
 .else
-FRAMEWORKPATH = ${NEXT_ROOT}/System/Library/Frameworks
+FRAMEWORKPATH = ${SDKROOT}/System/Library/Frameworks
 .endif
 $(FRAMEWORKS):
 	$(SRCROOT)/patchHeaders $(FRAMEWORKPATH)/$(PRIVATEHEADERPATH) $(FRAMEWORKS)/$(PRIVATEHEADERPATH:H)
-	ln -fs $(VERSIONSB)/PrivateHeaders $(FRAMEWORKS)/$(SYSTEMFRAMEWORK)/PrivateHeaders
+	${LN} -fs $(VERSIONSB)/PrivateHeaders $(FRAMEWORKS)/$(SYSTEMFRAMEWORK)/PrivateHeaders
 
 AUTOPATCHED = $(SRCROOT)/.autopatched
 PARTIAL = -partial
@@ -127,17 +145,19 @@ PSUFFIX-$(F) = $(PARTIAL)$(SUFFIX-$(F))
 .if empty(DONT-BUILD-$(A)-$(F)) # {
 ARCHS-$(F) += $(A)
 build-$(A)-$(F):
-	mkdir -p $(OBJROOT)/obj.$(A) && \
-	MAKEOBJDIR="$(OBJROOT)/obj.$(A)" MACHINE_ARCH="$(A)" \
+	${MKDIR} $(OBJROOT)/obj.$(A) && \
+	MAKEOBJDIR="$(OBJROOT)/obj.$(A)" MACHINE_ARCH=$(MACHINE_ARCH-$(A)) CCARCH=$(A) \
 	    DSTROOT=$(DSTROOT) OBJROOT=$(OBJROOT) SYMROOT=$(SYMROOT) \
-	    MAKEFLAGS="" CFLAGS="-arch $(A) $(LOCAL_CFLAGS)" $(BSDMAKEJ) libc$(SUFFIX-$(F)).a
+	    RC_NONARCH_CFLAGS="$(RC_NONARCH_CFLAGS)" MAKEFLAGS="" \
+	    OBJSUFFIX="$(OBJSUFFIX-$(F))" \
+	    $(MYBSDMAKEJ) libc$(SUFFIX-$(F)).a
 .else # } {
 build-$(A)-$(F):
 	@echo Not building libc$(PSUFFIX-$(F)).a for $(A)
 .endif # }
 .endfor # RC_ARCHS }
 
-NARCHS-$(F) != echo $(ARCHS-$(F)) | wc -w
+NARCHS-$(F) != ${ECHO} $(ARCHS-$(F)) | ${WC} -w
 
 build-$(F): $(FRAMEWORKS) $(AUTOPATCHED)
 .for A in $(RC_ARCHS) # {
@@ -147,12 +167,21 @@ build-$(F): build-$(A)-$(F)
 build-$(F):
 	@echo No libc$(PSUFFIX-$(F)).a built
 .else # } {
-LIPOARGS-$(F) != perl -e 'printf "%s\n", join(" ", map(qq(-arch $$_ \"$(OBJROOT)/obj.$$_/libc$(SUFFIX-$(F)).a\"), qw($(ARCHS-$(F)))))'
+LIPOARGS-$(F) != ${PERL} -e 'printf "%s\n", join(" ", map(qq(-arch $$_ \"$(OBJROOT)/obj.$$_/libc$(SUFFIX-$(F)).a\"), qw($(ARCHS-$(F)))))'
+.if $(dynamic) == $(F) # {
+LIPODYLDARGS-$(F) != ${PERL} -e 'printf "%s\n", join(" ", map(qq(-arch $$_ \"$(OBJROOT)/obj.$$_/libc-dyld.a\"), qw($(ARCHS-$(F)))))'
+.endif # }
 build-$(F):
 .if $(NARCHS-$(F)) == 1 # {
-	cp -p "$(OBJROOT)/obj.$(RC_ARCHS)/libc$(SUFFIX-$(F)).a" "$(SYMROOT)/libc$(PSUFFIX-$(F)).a"
+	${CP} "$(OBJROOT)/obj.$(RC_ARCHS)/libc$(SUFFIX-$(F)).a" "$(SYMROOT)/libc$(PSUFFIX-$(F)).a"
+.if $(dynamic) == $(F) # {
+	${CP} "$(OBJROOT)/obj.$(RC_ARCHS)/libc-dyld.a" "$(SYMROOT)/libc-dyld.a"
+.endif # }
 .else # } {
-	lipo -create $(LIPOARGS-$(F)) -output "$(SYMROOT)/libc$(PSUFFIX-$(F)).a"
+	${LIPO} -create $(LIPOARGS-$(F)) -output "$(SYMROOT)/libc$(PSUFFIX-$(F)).a"
+.if $(dynamic) == $(F) # {
+	${LIPO} -create $(LIPODYLDARGS-$(F)) -output "$(SYMROOT)/libc-dyld.a"
+.endif # }
 .endif # }
 .endif # }
 .endfor # FORMS }
@@ -160,61 +189,71 @@ build-$(F):
 # We autopatch the files into the directory containing the Makefile.inc.  This
 # will happen at installsrc.
 $(AUTOPATCHED):
-	@set -x && \
-	for m in `find $(SRCROOT) -name Makefile.inc`; do \
-	    cd `dirname $$m` && \
-	    bsdmake -I $(SRCROOT) -f $(SRCROOT)/Makefile.inc -f Makefile.inc -f $(SRCROOT)/Makefile.autopatch autopatch LIB=c SRCROOT=$(SRCROOT) || \
-	    exit 1; \
-	done
+.for A in $(ALLARCHS) # {
+	MACHINE_ARCH=$(A) SRCROOT="$(SRCROOT)" \
+	    $(MYBSDMAKE) -C "$(SRCROOT)" autopatch
+.endfor # ALLARCHS # }
 	touch $(AUTOPATCHED)
 
 copysrc:
-	pax -rw -p p . "$(SRCROOT)"
+	${PAX} -rw -p p . "$(SRCROOT)"
 
 installsrc: copysrc $(AUTOPATCHED)
 
 installhdrs-real:
 	MAKEOBJDIR="$(OBJROOT)" DESTDIR="$(DSTROOT)" MAKEFLAGS="" \
 	    DSTROOT=$(DSTROOT) OBJROOT=$(OBJROOT) SYMROOT=$(SYMROOT) \
-	    $(BSDMAKEJ) installhdrs
+	    $(MYBSDMAKEJ) installhdrs
 .for A in $(RC_ARCHS) # {
-	mkdir -p "$(OBJROOT)/obj.$(A)" && \
-	MAKEOBJDIR="$(OBJROOT)/obj.$(A)" MACHINE_ARCH="$(A)" \
+	${MKDIR} "$(OBJROOT)/obj.$(A)" && \
+	MAKEOBJDIR="$(OBJROOT)/obj.$(A)" MACHINE_ARCH=$(MACHINE_ARCH-$(A)) CCARCH=$(A) \
 	    DSTROOT=$(DSTROOT) OBJROOT=$(OBJROOT) SYMROOT=$(SYMROOT) \
-	    MAKEFLAGS="" $(BSDMAKEJ) installhdrs-md
+	    MAKEFLAGS="" RC_NONARCH_CFLAGS="$(RC_NONARCH_CFLAGS)" \
+	    $(MYBSDMAKEJ) installhdrs-md
 .endfor # RC_ARCHS # }
 
 .for F in $(FORMS) # {
 BI-install-$(F): build-$(F)
-	mkdir -p $(DSTROOT)/usr/local/lib/system
+	${MKDIR} $(DSTROOT)/usr/local/lib/system
 	if [ -f "$(SYMROOT)/libc$(PSUFFIX-$(F)).a" ]; then \
-		echo "Installing libc$(PSUFFIX-$(F)).a" && \
-		install -c -m 444 "$(SYMROOT)/libc$(PSUFFIX-$(F)).a" \
+		${ECHO} "Installing libc$(PSUFFIX-$(F)).a" && \
+		${INSTALL} -m 444 "$(SYMROOT)/libc$(PSUFFIX-$(F)).a" \
 			$(DSTROOT)/usr/local/lib/system && \
-		ranlib "$(DSTROOT)/usr/local/lib/system/libc$(PSUFFIX-$(F)).a" || exit 1; \
+		${RANLIB} "$(DSTROOT)/usr/local/lib/system/libc$(PSUFFIX-$(F)).a" || exit 1; \
 	fi
 .if $(dynamic) == $(F) # {
+	if [ -f "$(SYMROOT)/libc-dyld.a" ]; then \
+		${ECHO} "Installing libc-dyld.a" && \
+		${INSTALL} -m 444 "$(SYMROOT)/libc-dyld.a" \
+			$(DSTROOT)/usr/local/lib/system && \
+		${RANLIB} "$(DSTROOT)/usr/local/lib/system/libc-dyld.a" || exit 1; \
+	fi
 .for A in $(RC_ARCHS) # {
-	MAKEOBJDIR="$(OBJROOT)/obj.$(A)" MACHINE_ARCH="$(A)" \
+	MAKEOBJDIR="$(OBJROOT)/obj.$(A)" MACHINE_ARCH=$(MACHINE_ARCH-$(A)) CCARCH=$(A) \
 	DSTROOT=$(DSTROOT) OBJROOT=$(OBJROOT) SYMROOT=$(SYMROOT) \
 	    DSTROOT=$(DSTROOT) OBJROOT=$(OBJROOT) SYMROOT=$(SYMROOT) \
-	    MAKEFLAGS="" $(BSDMAKE) copyfiles
+	    MAKEFLAGS="" RC_NONARCH_CFLAGS="$(RC_NONARCH_CFLAGS)" \
+	    $(MYBSDMAKE) copyfiles
 .endfor # RC_ARCHS # }
 .endif # }
 .endfor # FORMS }
 
 # Don't use -j here; it may try to make links before the files are copied
-MANARGS != test `id -u` -eq 0 || echo MINSTALL=/usr/bin/install
+MANARGS != ${TEST} `id -u` -eq 0 || ${ECHO} MINSTALL=/usr/bin/install
+# Variables.mk defines MANDIR=${SHAREDIR}/man, but bsd.man.mk expects that
+# MANDIR=${SHAREDIR}/man/man, so we override.
+MANARGS += MANDIR=${SHAREDIR}/man/man
 install-man:
-	mkdir -p $(DSTROOT)/usr/share/man/man2
-	mkdir -p $(DSTROOT)/usr/share/man/man3
-	mkdir -p $(DSTROOT)/usr/share/man/man4
-	mkdir -p $(DSTROOT)/usr/share/man/man5
-	mkdir -p $(DSTROOT)/usr/share/man/man7
+	${MKDIR} $(DSTROOT)/usr/share/man/man2
+	${MKDIR} $(DSTROOT)/usr/share/man/man3
+	${MKDIR} $(DSTROOT)/usr/share/man/man4
+	${MKDIR} $(DSTROOT)/usr/share/man/man5
+	${MKDIR} $(DSTROOT)/usr/share/man/man7
 	MAKEOBJDIR="$(OBJROOT)" DESTDIR="$(DSTROOT)" \
 		DSTROOT='$(DSTROOT)' OBJROOT='$(OBJROOT)' SYMROOT='$(SYMROOT)' \
-		MACHINE_ARCH="$(ARCH)" MAKEFLAGS="" \
-		$(BSDMAKE) autopatchman all-man maninstall $(MANARGS)
+		MACHINE_ARCH="$(MACHINE_ARCH-$(FIRST_ARCH))" CCARCH=$(FIRST_ARCH) MAKEFLAGS="" \
+		RC_NONARCH_CFLAGS="$(RC_NONARCH_CFLAGS)" \
+		$(MYBSDMAKE) all-man maninstall $(MANARGS)
 
 install-all: build install-man
 .for F in $(FORMS) # {
@@ -223,8 +262,8 @@ install-all: BI-install-$(F)
 
 clean:
 .for F in $(FORMS) # {
-	rm -f $(SYMROOT)/libc$(PSUFFIX-$(F)).a
+	${RM} $(SYMROOT)/libc$(PSUFFIX-$(F)).a
 .endfor # FORMS }
 .for A in $(RC_ARCHS) # {
-	rm -rf $(OBJROOT)/obj.$(A)
+	${RMDIR} $(OBJROOT)/obj.$(A)
 .endfor # RC_ARCHS # }

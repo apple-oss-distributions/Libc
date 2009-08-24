@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2003 Apple Computer, Inc. All rights reserved.
+ * Copyright (c) 2003, 2008 Apple Inc. All rights reserved.
  *
  * @APPLE_LICENSE_HEADER_START@
  * 
@@ -71,7 +71,7 @@ union IEEEl2bits {
 
 #define LDBL_HEAD_TAIL_PAIR
 
-__private_extern__ void _ldbl2array32dd(union IEEEl2bits, uint32_t *);
+__private_extern__ int _ldbl2array32dd(union IEEEl2bits, uint32_t *);
 
 #define	LDBL_TO_ARRAY32(u, a) _ldbl2array32dd(u, a)
 
@@ -96,6 +96,35 @@ union IEEEl2bits {
 #define	LDBL_TO_ARRAY32(u, a) do {			\
 	(a)[0] = (uint32_t)(u).bits.manl;		\
 	(a)[1] = (uint32_t)(u).bits.manh;		\
+} while(0)
+#elif defined(__arm__)
+
+union IEEEl2bits {
+    long double     e;
+    struct {
+#ifndef __ARMEB__
+	unsigned int    manl    :32;
+	unsigned int    manh    :20;
+	unsigned int    exp     :11;
+	unsigned int    sign    :1;
+#else
+	unsigned int            sign    :1;
+	unsigned int            exp     :11;
+	unsigned int            manh    :20;
+	unsigned int            manl    :32;
+#endif
+    } bits;
+};
+
+#define LDBL_NBIT       0
+#define mask_nbit_l(u)  ((void)0)
+
+#define LDBL_MANH_SIZE  20
+#define LDBL_MANL_SIZE  32
+
+#define LDBL_TO_ARRAY32(u, a) do {                      \
+        (a)[0] = (uint32_t)(u).bits.manl;               \
+        (a)[1] = (uint32_t)(u).bits.manh;               \
 } while(0)
 
 #else

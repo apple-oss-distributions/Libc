@@ -53,15 +53,11 @@ __FBSDID("$FreeBSD: src/lib/libc/gen/scandir.c,v 1.7 2002/02/01 01:32:19 obrien 
 #include "un-namespace.h"
 
 /*
- * The DIRSIZ macro is the minimum record length which will hold the directory
+ * The _GENERIC_DIRSIZ macro is the minimum record length which will hold the directory
  * entry.  This requires the amount of space in struct dirent without the
  * d_name field, plus enough space for the name and a terminating nul byte
  * (dp->d_namlen + 1), rounded up to a 4 byte boundary.
  */
-#undef DIRSIZ
-#define DIRSIZ(dp)							\
-	((sizeof(struct dirent) - sizeof(dp)->d_name) +			\
-	    (((dp)->d_namlen + 1 + 3) &~ 3))
 
 int
 scandir(dirname, namelist, select, dcomp)
@@ -96,7 +92,7 @@ scandir(dirname, namelist, select, dcomp)
 		/*
 		 * Make a minimum size copy of the data
 		 */
-		p = (struct dirent *)malloc(DIRSIZ(d));
+		p = (struct dirent *)malloc(_GENERIC_DIRSIZ(d));
 		if (p == NULL)
 			goto fail;
 		p->d_fileno = d->d_fileno;
