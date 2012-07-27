@@ -54,7 +54,7 @@ __FBSDID("$FreeBSD: src/lib/libc/db/hash/hash.c,v 1.21 2009/03/28 07:20:39 delph
 #include <db.h>
 #include "hash.h"
 #include "page.h"
-#include "extern.h"
+#include "hash_extern.h"
 
 static int   alloc_segs(HTAB *, int);
 static int   flush_meta(HTAB *);
@@ -104,8 +104,7 @@ __hash_open(const char *file, int flags, int mode,
 	int bpages, hdrsize, new_table, nsegs, save_errno;
 
 	if ((flags & O_ACCMODE) == O_WRONLY) {
-		errno = EINVAL;
-		return (NULL);
+		flags += O_RDWR - O_WRONLY; /* POSIX */
 	}
 
 	if (!(hashp = (HTAB *)calloc(1, sizeof(HTAB))))
@@ -125,7 +124,8 @@ __hash_open(const char *file, int flags, int mode,
 			RETURN_ERROR(errno, error0);
 		(void)_fcntl(hashp->fp, F_SETFD, 1);
 		new_table = _fstat(hashp->fp, &statbuf) == 0 &&
-		    statbuf.st_size == 0 && (flags & O_ACCMODE) != O_RDONLY;
+		    statbuf.st_size == 0 &&
+		    ((flags & O_ACCMODE) != O_RDONLY || (flags & O_CREAT) != 0);
 	} else
 		new_table = 1;
 
@@ -684,7 +684,7 @@ found:
 			return (ERROR);
 		break;
 	default:
-		abort();
+		LIBC_ABORT("illegal action (%d)", action);
 	}
 	save_bufp->flags &= ~BUF_PIN;
 	return (SUCCESS);
