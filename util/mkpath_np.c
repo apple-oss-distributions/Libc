@@ -40,7 +40,7 @@
 int
 _mkpath_np(const char *path, mode_t omode, const char ** firstdir)
 {
-	char *apath = NULL;
+	char *apath = NULL, *opath = NULL, *s, *sn, *sl;
 	unsigned int depth = 0;
 	mode_t chmod_mode = 0;
 	int retval = 0;
@@ -63,9 +63,14 @@ _mkpath_np(const char *path, mode_t omode, const char ** firstdir)
 		case ENOENT:
 			break;
 		case EEXIST:
-			if (stat(path, &sbuf) == 0 &&
-			    !S_ISDIR(sbuf.st_mode)) {
-				retval = ENOTDIR;
+			if (stat(path, &sbuf) == 0) {
+			    if (S_ISDIR(sbuf.st_mode)) {
+					retval = EEXIST;
+				} else {
+					retval = ENOTDIR;
+				}
+			} else {
+				retval = EIO;
 			}
 			goto mkpath_exit;
 		case EISDIR: /* <rdar://problem/10288022> */
@@ -82,9 +87,28 @@ _mkpath_np(const char *path, mode_t omode, const char ** firstdir)
 		goto mkpath_exit;
 	}
 
+	sl = s = apath + strlen(apath) - 1;
+	do {
+		sn = s;
+		/* Strip off trailing /., see <rdar://problem/14351794> */
+		if (s - 1 > apath && *s == '.' && *(s - 1) == '/')
+			s -= 2;
+		/* Strip off trailing /, see <rdar://problem/11592386> */
+		if (s > apath && *s == '/')
+			s--;
+	} while (s < sn);
+	if (s < sl) {
+		s[1] = '\0';
+		path = opath = strdup(apath);
+		if (opath == NULL) {
+			retval = ENOMEM;
+			goto mkpath_exit;
+		}
+	}
+
 	while (1) {
 		/* Increase our depth and try making that directory */
-		char *s = strrchr(apath, '/');
+		s = strrchr(apath, '/');
 		if (!s) {
 			/* We should never hit this under normal circumstances,
 			 * but it can occur due to really unfortunate timing
@@ -151,7 +175,7 @@ _mkpath_np(const char *path, mode_t omode, const char ** firstdir)
 
 	while (depth > 1) {
 		/* Decrease our depth and make that directory */
-		char *s = strrchr(apath, '\0');
+		s = strrchr(apath, '\0');
 		*s = '/';
 		depth--;
 
@@ -183,6 +207,7 @@ _mkpath_np(const char *path, mode_t omode, const char ** firstdir)
 
 mkpath_exit:
 	free(apath);
+	free(opath);
 
 	errno = old_errno;
 	return retval;
