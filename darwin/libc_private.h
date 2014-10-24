@@ -21,19 +21,42 @@
  * @APPLE_LICENSE_HEADER_END@
  */
 
-#ifndef _SECURE_H_
+#ifndef __LIBC_PRIVATE_H__
+#define __LIBC_PRIVATE_H__
 
-#include <sys/types.h>
+#include <sys/cdefs.h>
+#include <Availability.h>
+#include <stddef.h>
 
-extern void __chk_fail_overflow (void) __attribute__((__noreturn__));
-extern void __chk_fail_overlap (void) __attribute__((__noreturn__));
+struct _libc_functions {
+	unsigned long version;
+	void (*atfork_prepare)(void); // version 1
+	void (*atfork_parent)(void); // version 1
+	void (*atfork_child)(void); // version 1
+	char *(*dirhelper)(int, char *, size_t); // version 1
+};
 
-/* Assert if a -> a+an and b -> b+bn overlap.
- * 0-lengths don't overlap anything.
- */
-extern void __chk_overlap (const void *a, size_t an, const void *b, size_t bn);
+struct ProgramVars; // forward reference
 
-/* Do we avoid the overlap check for older APIs? */
-extern uint32_t __chk_assert_no_overlap;
+__deprecated_msg("use _libc_initializer()")
+extern void
+__libc_init(const struct ProgramVars *vars,
+	void (*atfork_prepare)(void),
+	void (*atfork_parent)(void),
+	void (*atfork_child)(void),
+	const char *apple[]);
 
-#endif
+__OSX_AVAILABLE_STARTING(__MAC_10_10, __IPHONE_8_0)
+extern void
+_libc_initializer(const struct _libc_functions *funcs,
+	const char *envp[],
+	const char *apple[],
+	const struct ProgramVars *vars);
+
+extern void
+_libc_fork_child(void);
+
+extern int
+_atexit_receipt(void);
+
+#endif // __LIBC_PRIVATE_H__

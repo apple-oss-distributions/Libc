@@ -1,4 +1,4 @@
-/* Copyright (c) 2012 Apple Inc. All rights reserved.
+/* Copyright (c) 2012-2013 Apple Inc. All rights reserved.
  *
  * @APPLE_LICENSE_HEADER_START@
  * 
@@ -26,7 +26,8 @@
 #include <limits.h>
 #include <mach/mach_time.h>
 #include <os/alloc_once_private.h>
-#include <os/trace.h>
+#include <os/assumes.h>
+#include <os/debug_private.h>
 #include <_simple.h>
 #include <stdarg.h>
 #include <stdbool.h>
@@ -37,10 +38,7 @@
 #include <sys/time.h>
 #include <unistd.h>
 
-// Move this to trace.h when it's removed from assumes.h
-typedef bool (*os_redirect_t)(const char *);
-
-struct os_trace_globals_s {
+struct os_debug_log_globals_s {
 	uint64_t start;
 	os_redirect_t redirect;
 	int logfd;
@@ -52,7 +50,7 @@ struct os_trace_globals_s {
 // Otherwise, first try /var/tmp, then $TMPDIR, then give up.
 static inline
 int
-_os_trace_open_file(const char *suggestion)
+_os_debug_log_open_file(const char *suggestion)
 {
 	if (suggestion) {
 		return open(suggestion, O_WRONLY | O_APPEND | O_CREAT | O_NOFOLLOW |
@@ -63,7 +61,7 @@ _os_trace_open_file(const char *suggestion)
 	char filename[PATH_MAX];
 	char path[PATH_MAX];
 
-	snprintf(filename, sizeof(filename), "os_trace.%s.%d.log", getprogname(),
+	snprintf(filename, sizeof(filename), "os_debug_log.%s.%d.log", getprogname(),
 			 getpid());
 
 	strlcpy(path, "/var/tmp/", sizeof(path));
@@ -94,21 +92,21 @@ _os_trace_open_file(const char *suggestion)
 
 static
 void
-_os_trace_init(void *globals)
+_os_debug_log_init(void *globals)
 {
-	struct os_trace_globals_s *g = globals;
+	struct os_debug_log_globals_s *g = globals;
 
 	g->errors_only = false;
 
-	g->redirect = dlsym(RTLD_MAIN_ONLY, "_os_trace_redirect_func");
+	g->redirect = dlsym(RTLD_MAIN_ONLY, "_os_debug_log_redirect_func");
 
 	// This is a bit of a hack. LIBDISPATCH_LOG is part of dispatch's API.
-	// But now all dispatch logging goes through os_trace. So we have to
+	// But now all dispatch logging goes through os_debug_log. So we have to
 	// recognize this env var here in Libc.
 	// rdar://problem/11685359 tracks deprecating LIBDISPATCH_LOG from dispatch.
 	char *e = getenv("LIBDISPATCH_LOG");
 	if (!e) {
-		e = getenv("OS_TRACE");
+		e = getenv("OS_DEBUG_LOG");
 	}
 
 	// Default log destination
@@ -130,12 +128,12 @@ _os_trace_init(void *globals)
 	} else if (strcmp(e, "stdout") == 0) {
 		g->logfd = STDOUT_FILENO;
 	} else if (strcmp(e, "file") == 0) {
-		g->logfd = _os_trace_open_file(NULL);
+		g->logfd = _os_debug_log_open_file(NULL);
 		if (g->logfd == -1) {
 			g->errors_only = true;
 		}
 	} else {
-		g->logfd = _os_trace_open_file(e);
+		g->logfd = _os_debug_log_open_file(e);
 		if (g->logfd == -1) {
 			g->errors_only = true;
 		}
@@ -156,7 +154,7 @@ _os_trace_init(void *globals)
 		g->start = mach_absolute_time();
 
 		dprintf(g->logfd,
-				"=== os_trace log file opened for %s[%u] at %ld.%06u",
+				"=== os_debug_log log file opened for %s[%u] at %ld.%06u",
 				getprogname(), getpid(),
 				tv.tv_sec, tv.tv_usec);
 		if (g->prepend_timestamp) {
@@ -170,27 +168,31 @@ _os_trace_init(void *globals)
 	}
 }
 
-static inline __OS_CONST
-struct os_trace_globals_s *
-os_trace_globals(void)
+#ifndef OS_ALLOC_ONCE_KEY_OS_DEBUG_LOG
+#define OS_ALLOC_ONCE_KEY_OS_DEBUG_LOG OS_ALLOC_ONCE_KEY_OS_TRACE
+#endif
+
+static inline OS_CONST
+struct os_debug_log_globals_s *
+os_debug_log_globals(void)
 {
-	return (struct os_trace_globals_s *)
-		os_alloc_once(OS_ALLOC_ONCE_KEY_OS_TRACE,
-					  sizeof(struct os_trace_globals_s),
-					  _os_trace_init);
+	return (struct os_debug_log_globals_s *)
+		os_alloc_once(OS_ALLOC_ONCE_KEY_OS_DEBUG_LOG,
+					  sizeof(struct os_debug_log_globals_s),
+					  _os_debug_log_init);
 }
 
 static __attribute__((always_inline))
 uint64_t
-_os_trace_ticks_since_start(void)
+_os_debug_log_ticks_since_start(void)
 {
-	return mach_absolute_time() - os_trace_globals()->start;
+	return mach_absolute_time() - os_debug_log_globals()->start;
 }
 
 // False on error writing to file
 static inline
 bool
-_os_trace_write_fd(int level __attribute__((__unused__)),
+_os_debug_log_write_fd(int level __attribute__((__unused__)),
 		    char *str, int fd)
 {
 	size_t len = strlen(str);
@@ -215,44 +217,44 @@ _os_trace_write_fd(int level __attribute__((__unused__)),
 
 static __attribute__((__noinline__))
 void
-_os_trace_write_error(void)
+_os_debug_log_write_error(void)
 {
 	char err_str[256];
-	const char *pfx = "os_trace() :";
+	const char *pfx = "os_debug_log() :";
 	size_t pfxlen = strlen(pfx);
 
 	strlcpy(err_str, pfx, sizeof(err_str));
 	strerror_r(errno, err_str+pfxlen, sizeof(err_str)-pfxlen);
-	_simple_asl_log(LOG_ERR, "com.apple.os_trace", err_str);
+	_simple_asl_log(LOG_ERR, "com.apple.os_debug_log", err_str);
 }
 
 static inline
 void
-_os_trace_write(int level, char *str)
+_os_debug_log_write(int level, char *str)
 {
-	int fd = os_trace_globals()->logfd;
-	os_redirect_t rdr = os_trace_globals()->redirect;
+	int fd = os_debug_log_globals()->logfd;
+	os_redirect_t rdr = os_debug_log_globals()->redirect;
 	// true = redirect has fully handled, don't log
 	if (os_slowpath(rdr) && os_fastpath(rdr(str))) {
 		return;
 	}
 	if (os_slowpath(fd >= 0)) {
-		if (os_fastpath(_os_trace_write_fd(level, str, fd))) {
+		if (os_fastpath(_os_debug_log_write_fd(level, str, fd))) {
 			return;
 		} else {
-			_os_trace_write_error();
-			os_trace_globals()->logfd = -1;
+			_os_debug_log_write_error();
+			os_debug_log_globals()->logfd = -1;
 			// Don't return, fall out to syslog().
 		}
 	}
-	_simple_asl_log(level, "com.apple.os_trace", str);
+	_simple_asl_log(level, "com.apple.os_debug_log", str);
 }
 
 static __attribute__((always_inline))
 void
-_os_tracev(int level, const char *msg, va_list ap)
+_os_debug_logv(int level, const char *msg, va_list ap)
 {
-	if (os_slowpath(os_trace_globals()->errors_only) && level > LOG_ERR) {
+	if (os_slowpath(os_debug_log_globals()->errors_only) && level > LOG_ERR) {
 		// more important = lower integer
 		return;
 	}
@@ -265,38 +267,38 @@ _os_tracev(int level, const char *msg, va_list ap)
 	}
 	freebuf = buf;
 
-	// The os_trace macros prepend many spaces to the format string.
+	// The os_debug_log macros prepend many spaces to the format string.
 	// Overwrite them with a timestamp, *or* skip them.
-	const size_t pfxlen = strlen(_OS_TRACE_PREFIX);
+	const size_t pfxlen = strlen(_OS_DEBUG_LOG_PREFIX);
 	const size_t timelen = 16;
 	__OS_COMPILETIME_ASSERT__(pfxlen >= timelen);
 
 	if (os_fastpath(len > pfxlen)) {
-		if (os_slowpath(os_trace_globals()->prepend_timestamp)) {
+		if (os_slowpath(os_debug_log_globals()->prepend_timestamp)) {
 			char tmp = buf[timelen];
-			snprintf(buf, timelen + 1, "%16llu", _os_trace_ticks_since_start());
+			snprintf(buf, timelen + 1, "%16llu", _os_debug_log_ticks_since_start());
 			buf[timelen] = tmp; // snprintf's null
 		} else {
 			buf += pfxlen;
 		}
 	}
 
-	_os_trace_write(level, buf);
+	_os_debug_log_write(level, buf);
 	free(freebuf);
 }
 
 void
-_os_trace_error_str(char *msg)
+_os_debug_log_error_str(char *msg)
 {
-	_os_trace_write(LOG_ERR, msg);
+	_os_debug_log_write(LOG_ERR, msg);
 }
 
-__OS_PRINTFLIKE(1, 2)
+OS_FORMAT_PRINTF(1, 2)
 void
-_os_trace(const char *msg, ...)
+_os_debug_log(const char *msg, ...)
 {
 	va_list ap;
 	va_start(ap, msg);
-	_os_tracev(LOG_DEBUG, msg, ap);
+	_os_debug_logv(LOG_DEBUG, msg, ap);
 	va_end(ap);
 }

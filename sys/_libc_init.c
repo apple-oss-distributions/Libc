@@ -21,7 +21,7 @@
  * @APPLE_LICENSE_HEADER_END@
  */
 /*
- * __libc_init() is called from libSystem_initializer()
+ * _libc_initializer() is called from libSystem_initializer()
  */
 
 #include <limits.h>
@@ -30,34 +30,48 @@
 #include <machine/cpu_capabilities.h>
 #include <TargetConditionals.h>
 
-#if TARGET_IPHONE_SIMULATOR
-extern void __chk_init(void);
-extern void __xlocale_init(void);
-
-void
-_libc_sim_init(void) {
-	__chk_init();
-	__xlocale_init();
-}
-
-#else /* TARGET_IPHONE_SIMULATOR */
-struct ProgramVars; /* forward reference */
+#include "libc_private.h"
 
 extern void _program_vars_init(const struct ProgramVars *vars);
-extern void _libc_fork_init(void (*prepare)(void), void (*parent)(void), void (*child)(void));
+extern void _libc_fork_init(const struct _libc_functions *funcs);
+extern void __atexit_init(void);
+extern void __confstr_init(const struct _libc_functions *funcs);
 extern void _init_clock_port(void);
 extern void __chk_init(void);
 extern void __xlocale_init(void);
 extern void __guard_setup(const char *apple[]);
 
 void
-__libc_init(const struct ProgramVars *vars, void (*atfork_prepare)(void), void (*atfork_parent)(void), void (*atfork_child)(void), const char *apple[])
+_libc_initializer(const struct _libc_functions *funcs,
+	const char *envp[],
+	const char *apple[],
+	const struct ProgramVars *vars)
 {
 	_program_vars_init(vars);
-	_libc_fork_init(atfork_prepare, atfork_parent, atfork_child);
+	_libc_fork_init(funcs);
+	__confstr_init(funcs);
+	__atexit_init();
 	_init_clock_port();
 	__chk_init();
 	__xlocale_init();
 	__guard_setup(apple);
 }
-#endif /* TARGET_IPHONE_SIMULATOR */
+
+
+void
+__libc_init(const struct ProgramVars *vars,
+	void (*atfork_prepare)(void),
+	void (*atfork_parent)(void),
+	void (*atfork_child)(void),
+	const char *apple[])
+{
+	const struct _libc_functions funcs = {
+		.version = 1,
+		.atfork_prepare = atfork_prepare,
+		.atfork_parent = atfork_parent,
+		.atfork_child = atfork_child,
+		.dirhelper = NULL,
+	};
+	
+	return _libc_initializer(&funcs, NULL, apple, vars);
+}
