@@ -178,7 +178,6 @@ TYPES_INSTHDRS=(
 
 LOCALHDRS=(
 	${SRCROOT}/darwin/libc_private.h
-	${SRCROOT}/gen/assumes.h
 	${SRCROOT}/gen/utmpx_thread.h
 	${SRCROOT}/nls/FreeBSD/msgcat.h
 )

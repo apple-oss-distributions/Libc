@@ -90,7 +90,7 @@ typedef struct {
 #define	FTS_PHYSICAL	0x010		/* physical walk */
 #define	FTS_SEEDOT	0x020		/* return dot and dot-dot */
 #define	FTS_XDEV	0x040		/* don't cross devices */
-#define	FTS_WHITEOUT	0x080		/* return whiteout information */
+#define	FTS_WHITEOUT	0x080		/* (no longer supported) return whiteout information */
 #define	FTS_COMFOLLOWDIR 0x400		/* (non-std) follow command line symlinks for directories only */
 #if (defined(__MAC_OS_X_VERSION_MIN_REQUIRED) && __MAC_OS_X_VERSION_MIN_REQUIRED < 1090) || (defined(__IPHONE_OS_VERSION_MIN_REQUIRED) && __IPHONE_OS_VERSION_MIN_REQUIRED < 70000)
 #define	FTS_OPTIONMASK	0x4ff		/* valid user option mask */
@@ -126,6 +126,7 @@ typedef struct _ftsent {
 
 #define	FTS_ROOTPARENTLEVEL	-1
 #define	FTS_ROOTLEVEL		 0
+#define	FTS_MAXLEVEL		 0x7fffffff
 	short fts_level;		/* depth (-1 to N) */
 
 #define	FTS_D		 1		/* preorder directory */

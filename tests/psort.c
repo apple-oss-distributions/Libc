@@ -1,8 +1,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/time.h>
+#include <mach/clock_types.h>
 
-#include <bsdtests.h>
+#include <darwintest.h>
 
 typedef unsigned long T;
 
@@ -12,8 +13,7 @@ comparT(const void* a, const void* b) {
 	return x < y ? -1 : x > y ? 1 : 0;
 }
 
-static void
-test_psort(void)
+T_DECL(psort, "psort(3)")
 {
 	struct timeval tv_start, tv_stop;
 	struct rusage ru_start, ru_stop;
@@ -58,16 +58,7 @@ test_psort(void)
 	free(sorted);
 	free(buf);
 
-	test_double_less_than_or_equal("psort/qsort wall time", (double)pwt/qwt, 1.0);
-	test_double_less_than_or_equal("qsort/psort user time", (double)qut/put, 1.0);
-	test_long("psort matches qsort", match, true);
-}
-
-int main(void)
-{
-	test_start("psort");
-	test_psort();
-	test_stop();
-
-	return 0;
+	T_MAYFAIL; T_EXPECT_LE((double)pwt/qwt, 1.0, "psort/qsort wall time");
+	T_MAYFAIL; T_EXPECT_LE((double)qut/put, 1.0, "qsort/psort user time");
+	T_EXPECT_TRUE(match, "psort matches qsort");
 }

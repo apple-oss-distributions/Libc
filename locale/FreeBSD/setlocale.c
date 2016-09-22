@@ -48,6 +48,7 @@ __FBSDID("$FreeBSD: src/lib/libc/locale/setlocale.c,v 1.51 2007/01/09 00:28:00 i
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <fcntl.h>
 #include "collate.h"
 #include "lmonetary.h"	/* for __monetary_load_locale() */
 #include "lnumeric.h"	/* for __numeric_load_locale() */
@@ -360,5 +361,33 @@ __detect_path_locale(void)
 			_PathLocale = _PATH_LOCALE;
 	}
 	return (0);
+}
+
+__private_extern__ int
+__open_path_locale(const char *subpath)
+{
+	char filename[PATH_MAX];
+	int fd;
+
+	strcpy(filename, _PathLocale);
+	strcat(filename, "/");
+	strcat(filename, subpath);
+	fd = _open(filename, O_RDONLY);
+	if (fd >= 0) {
+		return fd;
+	}
+
+	strcpy(filename, _PATH_LOCALE);
+	strcat(filename, "/");
+	strcat(filename, subpath);
+	fd = _open(filename, O_RDONLY);
+	if (fd >= 0) {
+		return fd;
+	}
+
+	strcpy(filename, "/usr/local/share/locale");
+	strcat(filename, "/");
+	strcat(filename, subpath);
+	return _open(filename, O_RDONLY);
 }
 

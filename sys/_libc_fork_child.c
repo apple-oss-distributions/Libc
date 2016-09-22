@@ -28,6 +28,7 @@
 
 extern void _arc4_fork_child();
 extern void _init_clock_port(void);
+extern void __environ_lock_fork_child();
 
 void _libc_fork_child(void); // todo: private_extern?
 void
@@ -37,4 +38,5 @@ _libc_fork_child(void)
 
 	_arc4_fork_child();
 	_init_clock_port();
+	__environ_lock_fork_child();
 }

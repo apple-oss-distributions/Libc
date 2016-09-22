@@ -480,7 +480,8 @@ ___mb_cur_max_l(locale_t loc)
 static void
 __xlocale_release(void *loc)
 {
-	XL_RELEASE((locale_t)loc);
+	locale_t l = loc;
+	XL_RELEASE(l);
 }
 
 /*

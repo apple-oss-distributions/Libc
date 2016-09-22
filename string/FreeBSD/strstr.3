@@ -44,23 +44,23 @@
 .Sh SYNOPSIS
 .In string.h
 .Ft char *
-.Fn strstr "const char *big" "const char *little"
+.Fn strstr "const char *haystack" "const char *needle"
 .Ft char *
-.Fn strcasestr "const char *big" "const char *little"
+.Fn strcasestr "const char *haystack" "const char *needle"
 .Ft char *
-.Fn strnstr "const char *big" "const char *little" "size_t len"
+.Fn strnstr "const char *haystack" "const char *needle" "size_t len"
 .In string.h
 .In xlocale.h
 .Ft char *
-.Fn strcasestr_l "const char *big" "const char *little" "locale_t loc"
+.Fn strcasestr_l "const char *haystack" "const char *needle" "locale_t loc"
 .Sh DESCRIPTION
 The
 .Fn strstr
 function
 locates the first occurrence of the null-terminated string
-.Fa little
+.Fa needle
 in the null-terminated string
-.Fa big .
+.Fa haystack .
 .Pp
 The
 .Fn strcasestr
@@ -72,9 +72,9 @@ The
 .Fn strnstr
 function
 locates the first occurrence of the null-terminated string
-.Fa little
+.Fa needle
 in the string
-.Fa big ,
+.Fa haystack ,
 where not more than
 .Fa len
 characters are searched.
@@ -96,18 +96,18 @@ function may be passed a locale directly. See
 for more information.
 .Sh RETURN VALUES
 If
-.Fa little
+.Fa needle
 is an empty string,
-.Fa big
+.Fa haystack
 is returned;
 if
-.Fa little
+.Fa needle
 occurs nowhere in
-.Fa big ,
+.Fa haystack ,
 .Dv NULL
 is returned;
 otherwise a pointer to the first character of the first occurrence of
-.Fa little
+.Fa needle
 is returned.
 .Sh EXAMPLES
 The following sets the pointer

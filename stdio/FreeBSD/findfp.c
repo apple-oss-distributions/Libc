@@ -159,8 +159,10 @@ __sfp(int count)
 
 	if (count) {
 		if (__scounted >= __stream_max) {
-			errno = EMFILE;
-			return NULL;
+			if (__scounted >= (__stream_max = sysconf(_SC_STREAM_MAX))){
+				errno = EMFILE;
+				return NULL;
+			}
 		}
 		OSAtomicIncrement32(&__scounted);
 	}

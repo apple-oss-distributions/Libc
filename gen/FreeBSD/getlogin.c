@@ -37,6 +37,7 @@ __FBSDID("$FreeBSD: src/lib/libc/gen/getlogin.c,v 1.11 2009/12/05 19:04:21 ed Ex
 #include <errno.h>
 #include <pwd.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 #include "namespace.h"

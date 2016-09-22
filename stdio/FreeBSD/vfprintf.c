@@ -890,11 +890,11 @@ fp_common:
 			if (flags & LONGINT) {
 				wchar_t *wcp;
 
-				if (convbuf != NULL)
-					free(convbuf);
-				if ((wcp = GETARG(wchar_t *)) == NULL)
+				free(convbuf);
+				if ((wcp = GETARG(wchar_t *)) == NULL) {
+					convbuf = NULL;
 					cp = "(null)";
-				else {
+				} else {
 					convbuf = __wcsconv(wcp, prec, loc);
 					if (convbuf == NULL) {
 						fp->_flags |= __SERR;
@@ -1390,8 +1390,7 @@ error:
 	if (dtoaresult != NULL)
 		freedtoa(dtoaresult);
 #endif
-	if (convbuf != NULL)
-		free(convbuf);
+	free(convbuf);
 	if (__sferror(fp))
 		ret = EOF;
 	if ((argtable != NULL) && (argtable != statargtable))

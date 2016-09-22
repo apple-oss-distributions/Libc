@@ -180,6 +180,7 @@ struct _xlocale {
 				if ((x)->__free_extra) \
 					(*(x)->__free_extra)((x)); \
 				free((x)); \
+				(x) = NULL; \
 			}
 #define	XL_RETAIN(x)	if ((x) && (x)->__free_extra != XPERMANENT) { OSAtomicIncrement32Barrier(&(x)->__refcount); }
 #define XL_UNLOCK(x)	UNLOCK((x)->__lock);

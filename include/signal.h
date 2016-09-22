@@ -76,7 +76,7 @@ __END_DECLS
 
 #ifndef	_ANSI_SOURCE
 __BEGIN_DECLS
-void	(*bsd_signal(int, void (*)(int)))(int);
+void	(* _Nullable bsd_signal(int, void (* _Nullable)(int)))(int);
 //Begin-Libc
 #ifndef LIBC_ALIAS_KILL
 //End-Libc
@@ -136,7 +136,7 @@ int	sigpause(int) LIBC_ALIAS_C(sigpause);
 int	sigpending(sigset_t *);
 int	sigprocmask(int, const sigset_t * __restrict, sigset_t * __restrict);
 int	sigrelse(int);
-void    (*sigset(int, void (*)(int)))(int);
+void    (* _Nullable sigset(int, void (* _Nullable)(int)))(int);
 //Begin-Libc
 #ifndef LIBC_ALIAS_SIGSUSPEND
 //End-Libc

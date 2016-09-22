@@ -24,16 +24,20 @@
  * _libc_initializer() is called from libSystem_initializer()
  */
 
+#include <crt_externs.h>
 #include <limits.h>
 #include <stdint.h>
 #include <string.h>
+#include <stdlib.h>
 #include <machine/cpu_capabilities.h>
 #include <TargetConditionals.h>
+#include <_simple.h>
 
 #include "libc_private.h"
 
 extern void _program_vars_init(const struct ProgramVars *vars);
 extern void _libc_fork_init(const struct _libc_functions *funcs);
+extern void _arc4_init(void);
 extern void __atexit_init(void);
 extern void __confstr_init(const struct _libc_functions *funcs);
 extern void _init_clock_port(void);

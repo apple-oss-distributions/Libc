@@ -159,7 +159,7 @@ err_set_file(void *fp)
 void
 err_set_exit(void (*ef)(int))
 {
-	_e_err_exit.type = ERR_EXIT_FUNC;
+	_e_err_exit.type = ef ? ERR_EXIT_FUNC : ERR_EXIT_UNDEF;
 	_e_err_exit.func = ef;
 }
 
@@ -167,7 +167,7 @@ err_set_exit(void (*ef)(int))
 void
 err_set_exit_b(void (^ef)(int))
 {
-	_e_err_exit.type = ERR_EXIT_BLOCK;
+	_e_err_exit.type = ef ? ERR_EXIT_BLOCK : ERR_EXIT_UNDEF;
 	_e_err_exit.block = Block_copy(ef);
 }
 #endif /* __BLOCKS__ */
