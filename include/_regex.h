@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1999, 2007 Apple Inc. All rights reserved.
+ * Copyright (c) 2000, 2011 Apple Inc. All rights reserved.
  *
  * @APPLE_LICENSE_HEADER_START@
  * 
@@ -21,8 +21,39 @@
  * @APPLE_LICENSE_HEADER_END@
  */
 /*
- * Copyright (c) 1990, 1993, 1994
+ * Copyright (c) 2001-2009 Ville Laurikari <vl@iki.fi>
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 
+ *   1. Redistributions of source code must retain the above copyright
+ *      notice, this list of conditions and the following disclaimer.
+ * 
+ *   2. Redistributions in binary form must reproduce the above copyright
+ *      notice, this list of conditions and the following disclaimer in the
+ *      documentation and/or other materials provided with the distribution.
+ * 
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDER AND CONTRIBUTORS
+ * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+ * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+ * A PARTICULAR PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE COPYRIGHT
+ * HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+ * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
+/*-
+ * Copyright (c) 1992 Henry Spencer.
+ * Copyright (c) 1992, 1993
  *	The Regents of the University of California.  All rights reserved.
+ *
+ * This code is derived from software contributed to Berkeley by
+ * Henry Spencer of the University of Toronto.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -51,90 +82,40 @@
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
+ *
+ *	@(#)regex.h	8.2 (Berkeley) 1/3/94
  */
 
+/*
+ * Common header for regex.h and xlocale/_regex.h
+ */
 
-#include <sys/types.h>
-#include <sys/ioctl.h>
-#include <sys/stat.h>
+#ifndef __REGEX_H_
+#define	__REGEX_H_
 
-#include <errno.h>
-#include <fcntl.h>
-#include <grp.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <termios.h>
-#include <unistd.h>
-#include <util.h>
-#include <syslog.h>
+#include <_types.h>
+#include <Availability.h>
+#include <sys/_types/_size_t.h>
 
-int openpty(amaster, aslave, name, termp, winp)
-	int *amaster, *aslave;
-	char *name;
-	struct termios *termp;
-	struct winsize *winp;
-{
-	int master, slave;
-	char sname[128];
+/*********/
+/* types */
+/*********/
+#if __DARWIN_C_LEVEL >= __DARWIN_C_FULL
+#include <sys/_types/_wchar_t.h>
+#endif /* __DARWIN_C_LEVEL >= __DARWIN_C_FULL */
 
-	if ((master = posix_openpt(O_RDWR|O_NOCTTY)) < 0)
-		return -1;
-	if (grantpt(master) < 0 || unlockpt(master) < 0
-	    || ptsname_r(master, sname, sizeof(sname)) == -1
-	    || (slave = open(sname, O_RDWR|O_NOCTTY, 0)) < 0) {
-		(void) close(master);
-		return -1;
-	}
-	*amaster = master;
-	*aslave = slave;
-	if (name)
-		strcpy(name, sname);
-	if (termp)
-		(void) tcsetattr(slave, TCSAFLUSH, termp);
-	if (winp)
-		(void) ioctl(slave, TIOCSWINSZ, (char *)winp);
-	return (0);
-}
+typedef __darwin_off_t regoff_t;
 
-int
-forkpty(amaster, name, termp, winp)
-	int *amaster;
-	char *name;
-	struct termios *termp;
-	struct winsize *winp;
-{
-	int master, slave, pid;
+typedef struct {
+	int re_magic;
+	size_t re_nsub;		/* number of parenthesized subexpressions */
+	const char *re_endp;	/* end pointer for REG_PEND */
+	struct re_guts *re_g;	/* none of your business :-) */
+} regex_t;
 
-	if (openpty(&master, &slave, name, termp, winp) == -1)
-		return (-1);
-	switch (pid = fork()) {
-	case -1:
-		return (-1);
-	case 0:
-		/* 
-		 * child
-		 */
-		(void) close(master);
-		/*
-		 * 4300297: login_tty() may fail to set the controlling tty.
-		 * Since we have already forked, the best we can do is to 
-		 * dup the slave as if login_tty() succeeded.
-		 */
-		if (login_tty(slave) < 0) {
-			syslog(LOG_ERR, "forkpty: login_tty could't make controlling tty");
-			(void) dup2(slave, 0);
-			(void) dup2(slave, 1);
-			(void) dup2(slave, 2);
-			if (slave > 2)
-				(void) close(slave);
-		}
-		return (0);
-	}
-	/*
-	 * parent
-	 */
-	*amaster = master;
-	(void) close(slave);
-	return (pid);
-}
+typedef struct {
+	regoff_t rm_so;		/* start of match */
+	regoff_t rm_eo;		/* end of match */
+} regmatch_t;
+
+#endif /* !__REGEX_H_ */
