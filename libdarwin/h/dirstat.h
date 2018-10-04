@@ -21,6 +21,7 @@
 #ifndef __DIRSTAT_H__
 #define __DIRSTAT_H__
 
+#include <Availability.h>
 #include <sys/types.h>
 #include <stdint.h>
 

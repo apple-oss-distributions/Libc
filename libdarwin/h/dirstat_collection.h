@@ -1,15 +1,15 @@
 /*
- * Copyright (c) 2011 Apple, Inc. All rights reserved.
+ * Copyright (c) 2017 Apple Inc. All rights reserved.
  *
  * @APPLE_LICENSE_HEADER_START@
- * 
+ *
  * This file contains Original Code and/or Modifications of Original Code
  * as defined in and that are subject to the Apple Public Source License
  * Version 2.0 (the 'License'). You may not use this file except in
  * compliance with the License. Please obtain a copy of the License at
  * http://www.opensource.apple.com/apsl/ and read it before using this
  * file.
- * 
+ *
  * The Original Code and all software distributed under the License are
  * distributed on an 'AS IS' basis, WITHOUT WARRANTY OF ANY KIND, EITHER
  * EXPRESS OR IMPLIED, AND APPLE HEREBY DISCLAIMS ALL SUCH WARRANTIES,
@@ -17,22 +17,25 @@
  * FITNESS FOR A PARTICULAR PURPOSE, QUIET ENJOYMENT OR NON-INFRINGEMENT.
  * Please see the License for the specific language governing rights and
  * limitations under the License.
- * 
+ *
  * @APPLE_LICENSE_HEADER_END@
  */
 
-#include <strings.h>
+#include <sys/cdefs.h>
+#include <stdint.h>
+#include <stdbool.h>
 
-size_t
-strlcat(char * restrict dst, const char * restrict src, size_t maxlen) {
-    const size_t srclen = strlen(src);
-    const size_t dstlen = strnlen(dst, maxlen);
-    if (dstlen == maxlen) return maxlen+srclen;
-    if (srclen < maxlen-dstlen) {
-        memcpy(dst+dstlen, src, srclen+1);
-    } else {
-        memcpy(dst+dstlen, src, maxlen-dstlen-1);
-        dst[maxlen-1] = '\0';
-    }
-    return dstlen + srclen;
-}
+__BEGIN_DECLS
+
+#pragma GCC visibility push(hidden)
+
+typedef struct dirstat_fileid_set_s dirstat_fileid_set_s;
+typedef dirstat_fileid_set_s *dirstat_fileid_set_t;
+
+dirstat_fileid_set_t _dirstat_fileid_set_create(void);
+void _dirstat_fileid_set_destroy(dirstat_fileid_set_t set);
+bool _dirstat_fileid_set_add(dirstat_fileid_set_t set, uint64_t fileid);
+
+#pragma GCC visibility pop
+
+__END_DECLS

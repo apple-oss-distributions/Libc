@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017 Apple Computer, Inc. All rights reserved.
+ * Copyright (c) 2018 Apple Inc. All rights reserved.
  *
  * @APPLE_LICENSE_HEADER_START@
  *
@@ -20,18 +20,24 @@
  *
  * @APPLE_LICENSE_HEADER_END@
  */
+#include "internal.h"
 
-#include <sys/cdefs.h>
-#include <stdint.h>
-#include <stdbool.h>
+#pragma mark API
+size_t
+zsnprintf_np(char *buff, size_t len, const char *fmt, ...)
+{
+	int np = 0;
+	va_list ap;
 
-__BEGIN_DECLS
+	va_start(ap, fmt);
+	np = vsnprintf(buff, len, fmt, ap);
+	va_end(ap);
 
-typedef struct dirstat_fileid_set_s dirstat_fileid_set_s;
-typedef dirstat_fileid_set_s *dirstat_fileid_set_t;
+	if (np < 0) {
+		np = 0;
+	} else if ((size_t)np >= len) {
+		np = (int)len - 1;
+	}
 
-dirstat_fileid_set_t _dirstat_fileid_set_create(void);
-void _dirstat_fileid_set_destroy(dirstat_fileid_set_t set);
-bool _dirstat_fileid_set_add(dirstat_fileid_set_t set, uint64_t fileid);
-
-__END_DECLS
+	return (size_t)np;
+}
