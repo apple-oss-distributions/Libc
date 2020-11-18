@@ -43,8 +43,11 @@ __BEGIN_DECLS
 #define os_constant(x) __builtin_constant_p((x))
 #define os_hardware_trap() __asm__ __volatile__ (""); __builtin_trap()
 #define __OS_COMPILETIME_ASSERT__(e) __extension__({ \
+	_Pragma("clang diagnostic push") \
+	_Pragma("clang diagnostic ignored \"-Wvla\"") \
 	char __compile_time_assert__[(e) ? 1 : -1];	\
 	(void)__compile_time_assert__; \
+	_Pragma("clang diagnostic pop") \
 })
 #else /* __GNUC__ */
 #define os_constant(x) ((long)0)
@@ -130,6 +133,28 @@ os_assert_sprintf(int ret, size_t buff_size)
 	if ((size_t)ret > buff_size) {
 		os_crash("buffer too small: needed = %d, actual = %lu",
 				ret, buff_size);
+	}
+}
+
+/*!
+ * @function os_assert_asprintf
+ * A routine to assert the result of a call to {v}asprintf(3).
+ *
+ * @param ret
+ * The return value from {v}asnprintf(3).
+ *
+ * @discussion
+ * If ret is less than zero, the routine will abort the caller with a message
+ * indicating the nature of the failure in the Application Specific Information
+ * section of the resulting crash log.
+ */
+API_AVAILABLE(macos(10.15.2), ios(13.3), tvos(13.3), watchos(6.1.1))
+OS_ALWAYS_INLINE OS_COLD
+static inline void
+os_assert_asprintf(int ret)
+{
+	if (ret < 0) {
+		os_crash("error printing buffer: %s", strerror(errno));
 	}
 }
 
