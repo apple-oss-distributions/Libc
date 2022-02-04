@@ -26,18 +26,18 @@ T_DECL(strptime_PR_5879606, "alloca(strlen(input)) in strptime(\"%Z\")")
     time_t t = time(NULL);
     size_t s = 100000000;
     char *buf;
+    char tz[100] = { 0 };
 
 	localtime_r(&t, &tm);
 	T_LOG("%s", asctime(&tm));
 	T_ASSERT_NOTNULL(strptime("GMT", "%Z", &tm), "strptime GMT");
 	T_LOG("%s", asctime(&tm));
 
-	localtime_r(&t, &tm);
-	T_ASSERT_NOTNULL(strptime("PST", "%Z", &tm), "strptime PST");
-	T_LOG("%s", asctime(&tm));
+	strftime(tz, sizeof(tz), "%Z", &tm);
+	T_LOG("The current time zone name is: %s\n", tz);
 
 	localtime_r(&t, &tm);
-	T_ASSERT_NOTNULL(strptime("PDT", "%Z", &tm), "strptime PDT");
+	T_ASSERT_NOTNULL(strptime(tz, "%Z", &tm), "strptime local TZ name");
 	T_LOG("%s", asctime(&tm));
 
 	T_QUIET; T_ASSERT_NOTNULL((buf = malloc(s)), NULL);
@@ -49,10 +49,18 @@ T_DECL(strptime_PR_5879606, "alloca(strlen(input)) in strptime(\"%Z\")")
 
 T_DECL(strptime_PR_6882179, "date command fails with 'illegal time format'")
 {
-    struct tm tm;
-    char buf[] = "Tue May 12 18:19:41 PDT 2009";
+    struct tm tm, tmptm;
+    time_t t = time(NULL);
+    char *buf = NULL;
+    char tz[100] = { 0 };
 
+    localtime_r(&t, &tmptm);
+    strftime(tz, sizeof(tz), "%Z", &tmptm);
+    T_LOG("The current time zone name is: %s\n", tz);
+
+    asprintf(&buf, "Tue May 12 18:19:41 %s 2009", tz);
     T_ASSERT_NOTNULL(strptime(buf, "%a %b %d %T %Z %Y", &tm), NULL);
+    free(buf);
 
     T_EXPECT_EQ(tm.tm_sec, 0x29, NULL);
     T_EXPECT_EQ(tm.tm_min, 0x13, NULL);
@@ -148,6 +156,17 @@ T_DECL(strptime_PR_10842560, "strptime() with %W and %U")
 #if !TARGET_OS_BRIDGE
 T_DECL(strptime_asctime, "strptime->asctime",
        T_META_REQUIRES_OS_VARIANT_NOT("IsDarwinOS")) {
+
+    struct tm tmptm;
+    time_t t = time(NULL);
+    char tz[100] = { 0 };
+    localtime_r(&t, &tmptm);
+    strftime(tz, sizeof(tz), "%Z %z", &tmptm);
+    T_LOG("The current time zone offset is: %s\n", tz);
+    if (strcmp(tz, "PST -0800") != 0 && strcmp(tz, "PDT -0700") != 0) {
+        T_SKIP("This test expects the device to be in Pacific time");
+    }
+
     char *test[] = {
         "Sun,  6 Apr 2003 03:30:00 -0500",
         "Sun,  6 Apr 2003 04:30:00 -0500",

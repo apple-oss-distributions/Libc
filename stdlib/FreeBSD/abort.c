@@ -47,6 +47,7 @@ __FBSDID("$FreeBSD: src/lib/libc/stdlib/abort.c,v 1.11 2007/01/09 00:28:09 imp E
 #include "un-namespace.h"
 
 #include "libc_private.h"
+#include "stdio/FreeBSD/local.h" // for __cleanup
 
 #if __has_include(<CrashReporterClient.h>)
 #include <CrashReporterClient.h>
@@ -56,7 +57,6 @@ __FBSDID("$FreeBSD: src/lib/libc/stdlib/abort.c,v 1.11 2007/01/09 00:28:09 imp E
 #endif
 #include "_simple.h"
 
-extern void (*__cleanup)();
 extern void __abort(void) __cold __dead2;
 
 #define TIMEOUT	10000	/* 10 milliseconds */
@@ -68,6 +68,14 @@ abort()
 
 	if (!CRGetCrashLogMessage())
 		CRSetCrashLogMessage("abort() called");
+
+	/*
+	 * Fetch pthread_self() now, before we start masking signals.
+	 * pthread_self will abort or crash if the pthread's signature
+	 * appears corrupt. aborting inside abort is painful, so let's get
+	 * that out of the way before we go any further.
+	 */
+	pthread_t self = pthread_self();
 
 	/*
 	 * POSIX requires we flush stdio buffers on abort.
@@ -107,7 +115,7 @@ abort()
 	__pthread_workqueue_setkill(1);
 
 	(void)pthread_sigmask(SIG_SETMASK, &act.sa_mask, NULL);
-	(void)pthread_kill(pthread_self(), SIGABRT);
+	(void)pthread_kill(self, SIGABRT);
 
 	usleep(TIMEOUT); /* give time for signal to happen */
 
