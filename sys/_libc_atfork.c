@@ -36,6 +36,23 @@
 extern void _arc4_fork_child();
 extern void _init_clock_port(void);
 extern void __environ_lock_fork_child();
+extern void _locale_lock_fork_prepare();
+extern void _locale_lock_fork_parent();
+extern void _locale_lock_fork_child();
+
+void _libc_fork_prepare(void);
+void
+_libc_fork_prepare(void)
+{
+	_locale_lock_fork_prepare();
+}
+
+void _libc_fork_parent(void);
+void
+_libc_fork_parent(void)
+{
+	_locale_lock_fork_parent();
+}
 
 void _libc_fork_child(void); // todo: private_extern?
 void
@@ -46,5 +63,6 @@ _libc_fork_child(void)
 	_arc4_fork_child();
 	_init_clock_port();
 	__environ_lock_fork_child();
+	_locale_lock_fork_child();
 }
 #pragma clang diagnostic pop
