@@ -173,8 +173,10 @@ popen(command, type)
 		}
 		(void)posix_spawn_file_actions_addclose(&file_actions, pdes[1]);
 	}
+	THREAD_LOCK();
 	SLIST_FOREACH(p, &pidlist, next)
 		(void)posix_spawn_file_actions_addclose(&file_actions, p->fd);
+	THREAD_UNLOCK();	
 
 	argv[0] = "sh";
 	argv[1] = "-c";
