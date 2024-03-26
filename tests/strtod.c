@@ -3,6 +3,7 @@
 #include <locale.h>
 #include <math.h>
 #include <stdlib.h>
+#include <xlocale.h>
 
 #include <darwintest.h>
 
@@ -114,6 +115,15 @@ static void strtod_verify(const char *src, double expected_nearest, double expec
   strtod_verify_with_rounding_mode(src, FE_UPWARD, expected_up, expected_errno, src + strlen(src), "");
   double expected = signbit(expected_up) ? expected_up : expected_down;
   expected_errno = isnormal(expected) ? 0 : ERANGE;
+  strtod_verify_with_rounding_mode(src, FE_TOWARDZERO, expected, expected_errno, src + strlen(src), "");
+}
+
+static void strtod_verify_noerange(const char *src, double expected_nearest, double expected_down, double expected_up) {
+  int expected_errno = 0;
+  strtod_verify_with_rounding_mode(src, FE_TONEAREST, expected_nearest, expected_errno, src + strlen(src), "");
+  strtod_verify_with_rounding_mode(src, FE_DOWNWARD, expected_down, expected_errno, src + strlen(src), "");
+  strtod_verify_with_rounding_mode(src, FE_UPWARD, expected_up, expected_errno, src + strlen(src), "");
+  double expected = signbit(expected_up) ? expected_up : expected_down;
   strtod_verify_with_rounding_mode(src, FE_TOWARDZERO, expected, expected_errno, src + strlen(src), "");
 }
 
@@ -312,6 +322,21 @@ T_DECL(strtod, "strtod(3)")
          "00000000000000000000000000000000000000000000000000000000001e-324",
          min_subnormal_succ, min_subnormal, min_subnormal_succ);
 
+  // Subnormal hexfloats
+  // rdar://108539918 - Only set erange for inexact subnormal hexfloats
+  strtod_verify_noerange("0x0.8p-1022", 0x0.8p-1022, 0x0.8p-1022, 0x0.8p-1022);
+  strtod_verify_noerange("0x0.5555555555555p-1022",
+		0x0.5555555555555p-1022, 0x0.5555555555555p-1022, 0x0.5555555555555p-1022);
+  strtod_verify_noerange("0x0.fffffffffffffp-1022", max_subnormal, max_subnormal, max_subnormal);
+  // This is inexact, so should set ERANGE
+  strtod_verify("0x0.555555555555555555p-1022",
+		0x1.5555555555554p-1024, 0x1.5555555555554p-1024, 0x1.5555555555558p-1024);
+  // Rounds up to min normal (no error), down to max subnormal (erange)
+  static const char *hexfloat1 = "0x0.fffffffffffff8p-1022";
+  strtod_verify_with_rounding_mode(hexfloat1, FE_TONEAREST, min_normal, 0, hexfloat1 + strlen(hexfloat1), "");
+  strtod_verify_with_rounding_mode(hexfloat1, FE_UPWARD, min_normal, 0, hexfloat1 + strlen(hexfloat1), "");
+  strtod_verify_with_rounding_mode(hexfloat1, FE_DOWNWARD, max_subnormal, ERANGE, hexfloat1 + strlen(hexfloat1), "");
+
   strtod_verify("123456.7890123e-4789", 0.0, 0.0, min_subnormal);
   strtod_verify("-8e-9999999999999999999999999999999999", -0.0, -min_subnormal, -0.0);
   strtod_verify("0xfp-999999999999999999999999999999999", 0.0, 0.0, min_subnormal);
@@ -492,4 +517,56 @@ T_DECL(strtod_locale, "strtod(3) locale support")
   (void)setlocale(LC_ALL, "");
   (void)setlocale(LC_ALL, "POSIX");
   (void)setlocale(LC_ALL, "C");
+  (void)uselocale(LC_GLOBAL_LOCALE);
+}
+
+// Based on bug report from
+// https://stackoverflow.com/questions/76133503/strtod-does-not-respect-locale-on-macos-13-3-1
+// also see rdar://111449210 (SEED: Web: strtod() function does not respect locale in macOS 13)
+T_DECL(strtod_thread_locale, "strtod(3) thread-local locale support")
+{
+  if (setlocale(LC_ALL, "fr_FR") != NULL || setlocale(LC_ALL, "fr_FR.UTF-8") != NULL) {
+    // Skip these tests if "fr_FR" locale can't be found
+    double d1 = strtod("123.25", NULL);
+    if (d1 != 123.0) {
+      T_FAIL("\"123.25\" in fr_FR locale should parse to 123.0, not %g", d1);
+    } else {
+      T_PASS("fr_FR global locale ignores '.'");
+    }
+
+    double d2 = strtod("123,25", NULL);
+    if (d2 != 123.25) {
+      T_FAIL("\"123,25\" in fr_FR locale should parse to 123.25, not %g", d2);
+    } else {
+      T_PASS("fr_FR global locale recognizes ','");
+    }
+  }
+
+  locale_t c_locale = newlocale(LC_NUMERIC_MASK, "C", NULL);
+  if (c_locale != NULL) {
+    // Now set the thread-specific locale to use '.' and verify that works correctly
+    // Caveat:  These are less interesting if selecting the global "fr_FR" locale
+    // above failed, but they should still pass in that case.
+    uselocale(c_locale);
+    double d3 = strtod("123.25", NULL);
+    if (d3 != 123.25) {
+      T_FAIL("\"123.25\" in fr_FR global locale with C thread locale should parse to 123.25, not %g", d3);
+    } else {
+      T_PASS("fr_FR global locale with C thread locale recognizes '.'");
+    }
+    double d4 = strtod("123,25", NULL);
+    if (d4 != 123.0) {
+      T_FAIL("\"123,25\" in fr_FR global locale with C thread locale should parse to 123.0, not %g", d4);
+    } else {
+      T_PASS("fr_FR global locale with C thread locale ignores ','");
+    }
+    uselocale(LC_GLOBAL_LOCALE);
+    freelocale(c_locale);
+  }
+
+  // Try hard to restore a sane default locale after the above
+  (void)setlocale(LC_ALL, "");
+  (void)setlocale(LC_ALL, "POSIX");
+  (void)setlocale(LC_ALL, "C");
+  (void)uselocale(LC_GLOBAL_LOCALE);
 }
