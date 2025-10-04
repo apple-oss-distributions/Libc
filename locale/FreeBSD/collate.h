@@ -55,9 +55,8 @@
 #endif
 #endif
 
-/* see discussion in string/FreeBSD/strxfrm for this value */
-#define COLLATE_MAX_PRIORITY ((1 << 24) - 1)
-#define COLLATE_SUBST_PRIORITY (0x40000000)	/* bit indicates subst table */
+#define	COLLATE_MAX_PRIORITY	(0x7fffffff)	/* max signed value */
+#define	COLLATE_SUBST_PRIORITY	(0x40000000)	/* bit indicates subst table */
 
 #define DIRECTIVE_UNDEF 0x00
 #define DIRECTIVE_FORWARD 0x01
@@ -177,11 +176,14 @@ void	_collate_lookup(struct xlocale_collate *,const wchar_t *, int *, int *,
 	int, const int **);
 void	__collate_lookup_l(const __darwin_wchar_t *, int *, int *, int *, locale_t);
 void	__collate_lookup_which(const __darwin_wchar_t *, int *, int *, int, locale_t);
-void	__collate_xfrm(const __darwin_wchar_t *, __darwin_wchar_t **, locale_t);
 int	__collate_range_cmp(__darwin_wchar_t, __darwin_wchar_t, locale_t);
 size_t	__collate_collating_symbol(__darwin_wchar_t *, size_t, const char *, size_t, __darwin_mbstate_t *, locale_t);
 int	__collate_equiv_class(const char *, size_t, __darwin_mbstate_t *, locale_t);
 size_t	__collate_equiv_match(int, __darwin_wchar_t *, size_t, __darwin_wchar_t, const char *, size_t, __darwin_mbstate_t *, size_t *, locale_t);
+size_t	_collate_wxfrm(struct xlocale_collate *, const wchar_t *, wchar_t *,
+	size_t);
+size_t	_collate_sxfrm(struct xlocale_collate *, const wchar_t *, char *,
+	size_t);
 #else /* !__LIBC__ */
 void	__collate_lookup(const unsigned char *, int *, int *, int *);
 #endif /* __LIBC__ */
