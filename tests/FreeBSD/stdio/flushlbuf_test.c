@@ -7,9 +7,7 @@
 #include <errno.h>
 #include <stdio.h>
 
-#include <darwintest.h>
-
-T_GLOBAL_META(T_META_RUN_CONCURRENTLY(true));
+#include <atf-c.h>
 
 #define BUFSIZE 16
 
@@ -42,8 +40,8 @@ static int writefn(void *cookie, const char *buf, int len)
 	return -1;
 }
 
-T_DECL(flushlbuf_partial,
-    "Flush a line-buffered stream with partial write failure")
+ATF_TC_WITHOUT_HEAD(flushlbuf_partial);
+ATF_TC_BODY(flushlbuf_partial, tc)
 {
 	static struct stream s;
 	static char buf[BUFSIZE + 1];
@@ -56,17 +54,16 @@ T_DECL(flushlbuf_partial,
 	 * to the stream to fill the buffer without triggering a flush,
 	 * then check the state.
 	 */
-	T_SETUPBEGIN;
 	s.len = BUFSIZE / 2; // write will fail after this amount
-	T_ASSERT_NOTNULL(f = fwopen(&s, writefn), NULL);
-	T_ASSERT_POSIX_SUCCESS(setvbuf(f, buf, _IOLBF, BUFSIZE), NULL);
+	ATF_REQUIRE((f = fwopen(&s, writefn)) != NULL);
+	ATF_REQUIRE(setvbuf(f, buf, _IOLBF, BUFSIZE) == 0);
 	while (i < BUFSIZE)
 		if ((ret = fprintf(f, "%c", seq[i++])) < 0)
 			break;
-	T_EXPECT_EQ(i, BUFSIZE, NULL);
-	T_EXPECT_EQ(buf[BUFSIZE - 1], seq[i - 1], NULL);
-	T_EXPECT_POSIX_SUCCESS(ret, NULL);
-	T_EXPECT_EQ(s.pos, 0, NULL);
+	ATF_CHECK_EQ(BUFSIZE, i);
+	ATF_CHECK_EQ(seq[i - 1], buf[BUFSIZE - 1]);
+	ATF_CHECK_EQ(1, ret);
+	ATF_CHECK_EQ(0, s.pos);
 
 	/*
 	 * At this point, the buffer is full but writefn() has not yet
@@ -76,8 +73,8 @@ T_DECL(flushlbuf_partial,
 	 * written anything (which is why we don't increment i here).
 	 */
 	ret = fprintf(f, "%c", seq[i]);
-	T_EXPECT_POSIX_FAILURE(ret, EAGAIN, NULL);
-	T_EXPECT_EQ(s.pos, s.len, NULL);
+	ATF_CHECK_ERRNO(EAGAIN, ret < 0);
+	ATF_CHECK_EQ(s.len, s.pos);
 
 	/*
 	 * We have consumed s.len characters from the buffer, so continue
@@ -86,21 +83,20 @@ T_DECL(flushlbuf_partial,
 	 */
 	while (i < BUFSIZE + s.len)
 		fprintf(f, "%c", seq[i++]);
-	T_EXPECT_EQ(i, BUFSIZE + s.len, NULL);
-	T_EXPECT_EQ(buf[BUFSIZE - 1], seq[i - 1], NULL);
-	T_EXPECT_EQ(buf[BUFSIZE], 0, NULL);
-	T_SETUPEND;
+	ATF_CHECK_EQ(BUFSIZE + s.len, i);
+	ATF_CHECK_EQ(seq[i - 1], buf[BUFSIZE - 1]);
+	ATF_CHECK_EQ(0, buf[BUFSIZE]);
 
 	/*
 	 * The straw that breaks the camel's back: libc fails to recognize
 	 * that the buffer is full and continues to write beyond its end.
 	 */
 	fprintf(f, "%c", seq[i++]);
-	T_EXPECT_EQ(buf[BUFSIZE], 0, "Checking for overflow");
+	ATF_CHECK_EQ(0, buf[BUFSIZE]);
 }
 
-T_DECL(flushlbuf_full,
-    "Flush a line-buffered stream with full write failure")
+ATF_TC_WITHOUT_HEAD(flushlbuf_full);
+ATF_TC_BODY(flushlbuf_full, tc)
 {
 	static struct stream s;
 	static char buf[BUFSIZE];
@@ -113,17 +109,16 @@ T_DECL(flushlbuf_full,
 	 * to the stream to fill the buffer without triggering a flush,
 	 * then check the state.
 	 */
-	T_SETUPBEGIN;
 	s.len = 0; // any attempt to write will fail
-	T_ASSERT_NOTNULL(f = fwopen(&s, writefn), NULL);
-	T_ASSERT_POSIX_SUCCESS(setvbuf(f, buf, _IOLBF, BUFSIZE), NULL);
+	ATF_REQUIRE((f = fwopen(&s, writefn)) != NULL);
+	ATF_REQUIRE(setvbuf(f, buf, _IOLBF, BUFSIZE) == 0);
 	while (i < BUFSIZE)
 		if ((ret = fprintf(f, "%c", seq[i++])) < 0)
 			break;
-	T_EXPECT_EQ(i, BUFSIZE, NULL);
-	T_EXPECT_EQ(buf[BUFSIZE - 1], seq[i - 1], NULL);
-	T_EXPECT_POSIX_SUCCESS(ret, NULL);
-	T_EXPECT_EQ(s.pos, 0, NULL);
+	ATF_CHECK_EQ(BUFSIZE, i);
+	ATF_CHECK_EQ(seq[i - 1], buf[BUFSIZE - 1]);
+	ATF_CHECK_EQ(1, ret);
+	ATF_CHECK_EQ(0, s.pos);
 
 	/*
 	 * At this point, the buffer is full but writefn() has not yet
@@ -133,23 +128,28 @@ T_DECL(flushlbuf_full,
 	 * we don't increment i here).
 	 */
 	ret = fprintf(f, "%c", seq[i]);
-	T_EXPECT_POSIX_FAILURE(ret, EAGAIN, NULL);
-	T_EXPECT_EQ(s.pos, s.len, NULL);
+	ATF_CHECK_ERRNO(EAGAIN, ret < 0);
+	ATF_CHECK_EQ(s.len, s.pos);
 
 	/*
 	 * Now make our stream writeable.
 	 */
 	s.len = sizeof(s.buf);
-	T_SETUPEND;
 
 	/*
 	 * Flush the stream again.  The data we failed to write previously
 	 * should still be in the buffer and will now be written to the
 	 * stream.
-	 *
-	 * This was broken in 02862c291: a failure on the first attempt to
-	 * write will discard the unwritten data.
 	 */
-	T_EXPECT_POSIX_SUCCESS(fflush(f), NULL);
-	T_EXPECT_EQ(s.buf[0], seq[0], NULL);
+	ATF_CHECK_EQ(0, fflush(f));
+	ATF_CHECK_EQ(seq[0], s.buf[0]);
+}
+
+ATF_TP_ADD_TCS(tp)
+{
+
+	ATF_TP_ADD_TC(tp, flushlbuf_partial);
+	ATF_TP_ADD_TC(tp, flushlbuf_full);
+
+	return (atf_no_error());
 }
