@@ -124,6 +124,7 @@ _arc4_fork_child(void)
 #else /* __APPLE__ && !VARIANT_STATIC */
 
 #define	RANDOMDEV	"/dev/random"
+#define REKEY_BASE (1024*1024) /* NB. should be a power of 2 */
 
 static void
 _my_getentropy(uint8_t *buf, size_t size){
@@ -226,10 +227,13 @@ arc4_fetch(void)
 static os_unfair_lock arc4_lock = OS_UNFAIR_LOCK_INIT;
 static int arc4_count;
 
+static inline u_int32_t
+arc4_getword(void)
 static void
 arc4_stir(void)
 {
 	int n;
+	u_int32_t rekey_fuzz;
 	/*
 	 * If we don't have data, we need some now before we can integrate
 	 * it into the static buffers
@@ -252,7 +256,10 @@ arc4_stir(void)
 	 */
 	for (n = 0; n < 1024; n++)
 		(void) arc4_getbyte();
-	arc4_count = 1600000;
+
+	rekey_fuzz = arc4_getword();
+	/* rekey interval should not be predictable */
+	arc4_count = REKEY_BASE + (rekey_fuzz % REKEY_BASE);
 	rs_stired = 1;
 }
 
